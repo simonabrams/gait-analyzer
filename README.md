@@ -57,7 +57,75 @@ To run the app as a public web app on [Streamlit Cloud](https://streamlit.io/clo
 
 **Note:** Streamlit Cloud’s free tier has a **1 GB memory limit**. The app warns if an uploaded video is over 200 MB; very large videos may cause the app to run out of memory. For best results, use videos under 200 MB and under a few minutes.
 
-**Video analysis on Cloud:** The Cloud environment may lack system libraries (e.g. for OpenCV/MediaPipe), so **Analyze** can fail with an environment error. The app will still load so you can view About and use the UI; for full video analysis, run the app locally with `streamlit run app.py`.
+**Video analysis on Cloud:** The Cloud environment may lack system libraries (e.g. for OpenCV/MediaPipe), so **Analyze** can fail with an environment error. The app will still load so you can view About and use the UI; for full video analysis, run the app locally or deploy with Docker (below).
+
+### Deploy with Docker (full video analysis)
+
+The app’s Dockerfile installs the system libraries OpenCV and MediaPipe need, so **Analyze** works in the cloud. You can deploy without installing Docker on your computer by using a host that builds from GitHub.
+
+---
+
+#### Option A: Deploy to Render (no Docker on your machine)
+
+1. **Push your app to GitHub** (if it’s not already there).
+   - Create a repo, push your `gait-analyzer` code, and ensure the Dockerfile and `app.py` are in the repo root (or the root of the folder you push).
+
+2. **Sign up at [Render](https://render.com)** and log in (e.g. with GitHub).
+
+3. **Create a new Web Service**
+   - Dashboard → **New +** → **Web Service**.
+   - Connect your GitHub account if asked, then select the **gait-analyzer** repository (and the branch that has the Dockerfile, usually `main`).
+
+4. **Configure the service**
+   - **Name:** e.g. `gait-analyzer`.
+   - **Region:** pick one close to you.
+   - **Root Directory:** leave blank if the app and Dockerfile are in the repo root; otherwise set it to the folder that contains `app.py` and the Dockerfile.
+   - **Runtime:** **Docker** (Render will use your Dockerfile).
+   - **Instance type:** Free is enough to try; for heavier video use, a paid instance is more reliable.
+
+5. **Deploy**
+   - Click **Create Web Service**. Render will build the image from your Dockerfile and start the app. When it’s done, you’ll get a URL like `https://gait-analyzer-xxxx.onrender.com`.
+
+6. **Use the app**
+   - Open that URL in your browser. Upload a video, set height, and click **Analyze**; video analysis should work.
+
+**Notes:** On the free tier, the app may sleep after inactivity; the first request after that can be slow. The Dockerfile is already set up to run Streamlit on port 8501; Render maps that for you.
+
+---
+
+#### Option B: Run with Docker on your computer (test locally)
+
+Use this to run the same setup as in the cloud on your own machine.
+
+1. **Install Docker**
+   - [Docker Desktop](https://www.docker.com/products/docker-desktop/) for Mac or Windows (includes Docker Engine). For Linux, install [Docker Engine](https://docs.docker.com/engine/install/) for your distro.
+   - Open Docker Desktop (or start the Docker service) so the daemon is running.
+
+2. **Open a terminal** in the project folder (the one that contains `app.py` and the Dockerfile).
+
+3. **Build the image**
+
+   ```bash
+   docker build -t gait-analyzer .
+   ```
+
+   This reads the Dockerfile and builds an image named `gait-analyzer`. The first time may take a few minutes.
+
+4. **Run the container**
+
+   ```bash
+   docker run -p 8501:8501 gait-analyzer
+   ```
+
+   This starts the app inside a container and maps port 8501 to your machine.
+
+5. **Open the app**
+   - In your browser go to **http://localhost:8501**. Upload a video and run an analysis to confirm everything works.
+
+6. **Stop the app**
+   - In the terminal press **Ctrl+C** once. The container will stop.
+
+To run again later, use the same `docker run` command; you only need to run `docker build` again if you change the Dockerfile or requirements.
 
 ## Outputs
 
