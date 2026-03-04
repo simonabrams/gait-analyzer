@@ -2,12 +2,91 @@
 
 Analyzes running gait from a side-view video using MediaPipe Pose and rule-based heuristics. Produces an annotated video, metrics dashboard, structured JSON results, and a text report with recommendations.
 
-## Requirements
+- **Phase 2 (Streamlit):** Single-page app in the repo root (`app.py`, `streamlit run app.py`).
+- **Phase 3 (Full-stack):** Next.js frontend + FastAPI backend + Celery + PostgreSQL + Redis + Cloudflare R2. Run history, progress charts, and shareable run links.
+
+---
+
+## Phase 3: Full-stack (Next.js + FastAPI)
+
+### Project structure
+
+- `frontend/` — Next.js 14 (App Router), TypeScript, Tailwind, Recharts, react-dropzone.
+- `backend/` — FastAPI, SQLAlchemy, Celery worker, R2 storage; reuses `pose_extractor`, `metrics`, `heuristics`, `visualizer`, `dashboard`, `reporter`, `job_runner`.
+
+### Local development (Docker: API + worker + Postgres + Redis)
+
+1. **Start backend and infra:**
+
+   ```bash
+   docker-compose up -d postgres redis
+   ```
+
+2. **Apply migrations** (install backend deps, then from repo root):
+
+   ```bash
+   pip install -r backend/requirements.txt
+   cd backend && alembic upgrade head && cd ..
+   ```
+
+   Ensure `DATABASE_URL` points at your Postgres (default: `postgresql://postgres:postgres@localhost:5432/gait_analyzer`).
+
+3. **Start API and worker:**
+
+   ```bash
+   docker-compose up api worker
+   ```
+
+   API: http://localhost:8000. Docs: http://localhost:8000/docs.
+
+4. **Frontend** (separate terminal):
+
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+   Set `NEXT_PUBLIC_API_URL=http://localhost:8000` in `frontend/.env.local` (optional; default is localhost:8000).
+
+5. **R2 (optional for local):** Configure `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` for the API and worker if you want to test uploads. Otherwise, video upload will fail at the R2 upload step.
+
+### Environment variables
+
+| Variable | Where | Description |
+|----------|--------|-------------|
+| `DATABASE_URL` | API, worker | PostgreSQL URL (e.g. `postgresql://user:pass@host:5432/db`) |
+| `REDIS_URL` | API, worker | Redis URL (e.g. `redis://localhost:6379/0`) |
+| `CORS_ORIGINS` | API | Allowed frontend origins (e.g. `http://localhost:3000`) |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | API, worker | Cloudflare R2 (S3-compatible) |
+| `NEXT_PUBLIC_API_URL` | Frontend | Backend API base URL (e.g. `https://your-api.onrender.com`) |
+
+### Deployment
+
+- **Backend (Render):** Use `render.yaml` to create the web service (API), private service (Celery worker), and PostgreSQL. Create a **Redis** instance in the Render dashboard and set `REDIS_URL` for both API and worker. Set R2 and `CORS_ORIGINS` (your Vercel frontend URL) in the dashboard. After first deploy, run Alembic migrations (e.g. via a one-off job or locally with `DATABASE_URL` pointing at Render).
+- **Frontend (Vercel):** Deploy the `frontend/` directory. Set `NEXT_PUBLIC_API_URL` to the Render API URL. The run result page (`/runs/[id]`) is server-rendered for shareable link previews (og:title, og:description).
+
+### API routes
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/health` | Health check |
+| POST | `/api/runs` | Create run (multipart: file, height_cm) |
+| GET | `/api/runs/{id}/status` | Poll status and progress |
+| GET | `/api/runs/{id}` | Full run detail + signed video/dashboard URLs |
+| GET | `/api/runs` | List runs (for history + charts) |
+| DELETE | `/api/runs/{id}` | Delete run and R2 objects |
+
+---
+
+## Phase 2: Streamlit (legacy)
+
+### Requirements
 
 - Python 3.10+
 - See `requirements.txt` for dependencies (MediaPipe, OpenCV, NumPy, Matplotlib, Streamlit)
 
-## Setup
+### Setup
 
 ```bash
 python3 -m venv .venv
@@ -15,9 +94,7 @@ source .venv/bin/activate   # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Usage
-
-### Web app (recommended)
+### Usage
 
 Run the Streamlit app locally:
 
