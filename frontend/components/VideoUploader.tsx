@@ -16,6 +16,7 @@ export default function VideoUploader({
   const [file, setFile] = useState<File | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [preprocessingWarning, setPreprocessingWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -41,6 +42,7 @@ export default function VideoUploader({
   const submit = async () => {
     if (!file) return;
     setError(null);
+    setPreprocessingWarning(null);
     setProgress(0);
     setStatus("Uploading...");
     try {
@@ -53,6 +55,7 @@ export default function VideoUploader({
         const s = await getRunStatus(run_id);
         setProgress(s.progress);
         setStatus(s.status === "processing" ? "Processing..." : s.status);
+        if (s.preprocessing_warning) setPreprocessingWarning(s.preprocessing_warning);
         if (s.status === "complete") {
           if (pollRef.current) clearInterval(pollRef.current);
           pollRef.current = null;
@@ -99,6 +102,11 @@ export default function VideoUploader({
           className="border rounded px-3 py-2 w-24"
         />
       </div>
+      {preprocessingWarning && (
+        <div className="rounded-lg border border-amber-400 bg-amber-50 px-4 py-3 text-amber-800 text-sm">
+          Your video was trimmed to 3 minutes for processing. For best results, upload a 30–60 second clip.
+        </div>
+      )}
       {progress !== null && (
         <div>
           <div className="h-2 bg-gray-200 rounded overflow-hidden">

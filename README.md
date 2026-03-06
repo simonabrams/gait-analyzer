@@ -81,6 +81,16 @@ Open http://localhost:3000, upload a video (MP4/MOV) and set height — uploads 
 | `CORS_ORIGINS` | API | Allowed frontend origins (e.g. `http://localhost:3000`) |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | API, worker | Cloudflare R2 (S3-compatible) |
 | `NEXT_PUBLIC_API_URL` | Frontend | Backend API base URL (e.g. `https://your-api.onrender.com`) |
+| `GAIT_MAX_FRAMES` | Worker | Max frames to process (e.g. `900` ≈ 30 s at 30 fps). Reduces memory use. |
+| `GAIT_MAX_WIDTH` | Worker | Max frame width in pixels (e.g. `1280`). Reduces memory use. |
+
+### Worker OOM / stalled runs
+
+If the worker is killed with **signal 9 (SIGKILL)** or **WorkerLostError**, the OS likely ran out of memory (OOM). The run will stay in "processing" because the worker never got to update the DB. To avoid this:
+
+- The worker runs with **concurrency 1** (`-c 1`) so only one video is processed at a time.
+- Set **GAIT_MAX_FRAMES** and **GAIT_MAX_WIDTH** on the worker (e.g. in `docker-compose.yml`) to cap memory; defaults in the stack are 900 frames and 1280 px width.
+- Use shorter or lower-resolution videos. If it still OOMs, lower `GAIT_MAX_FRAMES` (e.g. `450`) or `GAIT_MAX_WIDTH` (e.g. `854`).
 
 ### Deployment
 

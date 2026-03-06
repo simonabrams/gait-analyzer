@@ -1,6 +1,7 @@
 """
-Celery app and process_video task: download from R2, run job_runner, upload outputs, update DB.
+Celery app and process_video task: download from R2, preprocess, run job_runner, upload outputs, update DB.
 """
+import logging
 import os
 import tempfile
 import uuid
@@ -18,6 +19,9 @@ from backend.storage import (
     raw_video_key,
     upload_file,
 )
+from backend.video_preprocessor import preprocess_video
+
+logger = logging.getLogger(__name__)
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
@@ -50,10 +54,30 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
         db.close()
         return
     temp_path = None
+    preprocessed_path = None
     try:
         temp_path = tempfile.mkdtemp(prefix="gait_")
         video_path = Path(temp_path) / "input.mp4"
         download_file(raw_video_r2_key, str(video_path))
+
+        target_height = 720
+        try:
+            target_height = int(os.environ.get("VIDEO_MAX_HEIGHT", "720"))
+        except ValueError:
+            pass
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as preprocessed_fd:
+            preprocessed_path = preprocessed_fd.name
+        preprocess_meta = preprocess_video(
+            str(video_path), preprocessed_path, target_height=target_height
+        )
+        run.preprocessing_meta = preprocess_meta
+        db.commit()
+        logger.info(
+            "Preprocessing: %s -> %s, output_size_mb=%.1f",
+            preprocess_meta.get("original_resolution"),
+            preprocess_meta.get("output_resolution"),
+            preprocess_meta.get("output_size_mb"),
+        )
 
         def on_progress(percent: float, message: str) -> None:
             _update_progress(run_id, int(min(percent, 100)))
@@ -69,7 +93,7 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
             pass
 
         out = run_analysis(
-            str(video_path),
+            preprocessed_path,
             float(height_cm),
             progress_callback=on_progress,
             max_frames=max_frames,
@@ -102,6 +126,11 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
         raise
     finally:
         db.close()
+        if preprocessed_path and os.path.exists(preprocessed_path):
+            try:
+                os.unlink(preprocessed_path)
+            except OSError:
+                pass
         if temp_path and os.path.isdir(temp_path):
             for f in Path(temp_path).iterdir():
                 try:

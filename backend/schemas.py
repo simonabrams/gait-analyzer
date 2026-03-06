@@ -15,6 +15,7 @@ class RunCreate(BaseModel):
 class RunStatusResponse(BaseModel):
     status: str
     progress: int
+    preprocessing_warning: Optional[str] = None
 
 
 class RunListItem(BaseModel):

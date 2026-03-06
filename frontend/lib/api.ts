@@ -8,6 +8,7 @@ export interface RunCreated {
 export interface RunStatus {
   status: string;
   progress: number;
+  preprocessing_warning: string | null;
 }
 
 export interface RunListItem {

@@ -147,7 +147,14 @@ def get_run_status(run_id: uuid.UUID, db: Session = Depends(get_db)):
     run = _get_run(db, run_id)
     if not run:
         raise HTTPException(404, "Run not found")
-    return RunStatusResponse(status=run.status.value, progress=run.progress_pct or 0)
+    preprocessing_warning = None
+    if (run.preprocessing_meta or {}).get("was_trimmed"):
+        preprocessing_warning = "Video trimmed to 3 minutes"
+    return RunStatusResponse(
+        status=run.status.value,
+        progress=run.progress_pct or 0,
+        preprocessing_warning=preprocessing_warning,
+    )
 
 
 @app.get("/api/runs/{run_id}", response_model=RunDetail)

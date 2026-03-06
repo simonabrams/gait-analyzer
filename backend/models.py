@@ -32,3 +32,4 @@ class Run(Base):
     dashboard_image_r2_key = Column(String(512), nullable=True)
     results_json = Column(JSONB, nullable=True)
     error_message = Column(Text, nullable=True)
+    preprocessing_meta = Column(JSONB, nullable=True)

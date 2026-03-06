@@ -4,6 +4,7 @@ Runs the full gait analysis pipeline. Uses tempfile for outputs; caller cleans u
 
 import json
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -110,6 +111,20 @@ def run_analysis(
         for frame in annotated:
             writer.write(frame)
         writer.release()
+
+        fd_h264, h264_path = tempfile.mkstemp(suffix=".mp4", prefix="gait_annotated_h264_")
+        os.close(fd_h264)
+        temp_paths.append(h264_path)
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-i", annotated_video_path,
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                h264_path,
+            ],
+            check=True,
+            capture_output=True,
+        )
+        annotated_video_path = h264_path
 
         report(70, "Building dashboard...")
         fig = create_dashboard(results_from_json)
