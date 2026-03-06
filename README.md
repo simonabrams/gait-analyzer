@@ -197,7 +197,7 @@ The app’s Dockerfile installs the system libraries OpenCV and MediaPipe need, 
 6. **Use the app**
    - Open that URL in your browser. Upload a video, set height, and click **Analyze**; video analysis should work.
 
-**Notes:** On the free tier, the app may sleep after inactivity; the first request after that can be slow. The Dockerfile is already set up to run Streamlit on port 8501; Render maps that for you.
+**Notes:** On the free tier, the app may sleep after inactivity; the first request after that can be slow. The Dockerfile runs Streamlit on port 10000 so Render’s proxy can reach it (Render’s default for Docker web services is port 10000). If you see **502 Bad Gateway**, the service may still be starting (retry after a minute), or it may have run out of memory during analysis—try a shorter/smaller video or lower `GAIT_MAX_FRAMES` / `GAIT_MAX_WIDTH`.
 
 **If the instance runs out of memory** when analyzing a video, the app limits input to **450 frames (~15 sec)** and **854px width** by default so it fits in ~512 MB–1 GB RAM. You can override this with environment variables (e.g. in Render: **Environment** tab):
 - `GAIT_MAX_FRAMES` — max frames to process (default `450`). Lower it (e.g. `300`) if you still get OOM.
