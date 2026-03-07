@@ -94,55 +94,62 @@ def _draw_metrics_panel(img, lines, font_scale=0.9, thickness=2, padding=12, alp
         y0 += line_spacing
 
 
-def generate_annotated_frames(frames, pose_frames, results):
+def annotate_single_frame(frame, frame_idx, pose_by_idx, results, frame_flags=None):
     import cv2
+    if frame is None:
+        return None
     strides = results.get("strides", [])
     flags = results.get("flags", [])
     summary = results.get("summary", {})
-    frame_flags = build_frame_to_stride_flags(strides, flags)
+    if frame_flags is None:
+        frame_flags = build_frame_to_stride_flags(strides, flags)
+    img = frame.copy()
+    h, w = img.shape[:2]
+    pose = pose_by_idx.get(frame_idx)
+    flagged_joints = get_flagged_joint_set(frame_flags.get(frame_idx, set()))
+
+    if pose and pose.get("landmarks"):
+        lm = pose["landmarks"]
+        pts = [(int(l["x"] * w), int(l["y"] * h)) for l in lm]
+        for (a, b) in POSE_CONNECTIONS:
+            if a < len(pts) and b < len(pts) and pts[a] and pts[b]:
+                cv2.line(img, pts[a], pts[b], (0, 255, 0), 2)
+        for j, pt in enumerate(pts):
+            if j in flagged_joints:
+                cv2.circle(img, pt, 6, (0, 0, 255), -1)
+            else:
+                cv2.circle(img, pt, 4, (0, 255, 0), -1)
+
+    stride_at_frame = _stride_at_frame(frame_idx, strides)
+    if stride_at_frame:
+        cad = stride_at_frame.get("cadence", "")
+        osc = stride_at_frame.get("vertical_osc_cm", "")
+        knee = stride_at_frame.get("knee_angle_strike_deg", "")
+        lean = stride_at_frame.get("trunk_lean_deg", "")
+    else:
+        cad = summary.get("cadence_avg", "")
+        osc = summary.get("vertical_osc_avg_cm", "")
+        knee = summary.get("knee_angle_strike_avg_deg", "")
+        lean = summary.get("trunk_lean_avg_deg", "")
+    lines = [
+        f"Cadence: {cad} spm",
+        f"Vert osc: {osc} cm",
+        f"Knee @ strike: {knee} deg",
+        f"Trunk lean: {lean} deg",
+    ]
+    _draw_metrics_panel(img, lines)
+    return img
+
+
+def generate_annotated_frames(frames, pose_frames, results):
     pose_by_idx = {p["frame_idx"]: p for p in pose_frames}
-
-    out = []
+    frame_flags = build_frame_to_stride_flags(
+        results.get("strides", []), results.get("flags", [])
+    )
     for i, frame in enumerate(frames):
-        if frame is None:
-            continue
-        img = frame.copy()
-        h, w = img.shape[:2]
-        pose = pose_by_idx.get(i)
-        flagged_joints = get_flagged_joint_set(frame_flags.get(i, set()))
-
-        if pose and pose.get("landmarks"):
-            lm = pose["landmarks"]
-            pts = [(int(l["x"] * w), int(l["y"] * h)) for l in lm]
-            for (a, b) in POSE_CONNECTIONS:
-                if a < len(pts) and b < len(pts) and pts[a] and pts[b]:
-                    cv2.line(img, pts[a], pts[b], (0, 255, 0), 2)
-            for j, pt in enumerate(pts):
-                if j in flagged_joints:
-                    cv2.circle(img, pt, 6, (0, 0, 255), -1)
-                else:
-                    cv2.circle(img, pt, 4, (0, 255, 0), -1)
-
-        stride_at_frame = _stride_at_frame(i, strides)
-        if stride_at_frame:
-            cad = stride_at_frame.get("cadence", "")
-            osc = stride_at_frame.get("vertical_osc_cm", "")
-            knee = stride_at_frame.get("knee_angle_strike_deg", "")
-            lean = stride_at_frame.get("trunk_lean_deg", "")
-        else:
-            cad = summary.get("cadence_avg", "")
-            osc = summary.get("vertical_osc_avg_cm", "")
-            knee = summary.get("knee_angle_strike_avg_deg", "")
-            lean = summary.get("trunk_lean_avg_deg", "")
-        lines = [
-            f"Cadence: {cad} spm",
-            f"Vert osc: {osc} cm",
-            f"Knee @ strike: {knee} deg",
-            f"Trunk lean: {lean} deg",
-        ]
-        _draw_metrics_panel(img, lines)
-        out.append(img)
-    return out
+        img = annotate_single_frame(frame, i, pose_by_idx, results, frame_flags)
+        if img is not None:
+            yield img
 
 
 def _stride_at_frame(frame_idx, strides):

@@ -202,7 +202,8 @@ The app’s Dockerfile installs the system libraries OpenCV and MediaPipe need, 
 **If the instance runs out of memory** when analyzing a video, the app limits input to **450 frames (~15 sec)** and **854px width** by default so it fits in ~512 MB–1 GB RAM. You can override this with environment variables (e.g. in Render: **Environment** tab):
 - `GAIT_MAX_FRAMES` — max frames to process (default `450`). Lower it (e.g. `300`) if you still get OOM.
 - `GAIT_MAX_WIDTH` — max frame width in pixels (default `854`). Lower it (e.g. `640`) to use less memory.
-For longer or full-resolution analysis, use a larger instance or run the app locally (no limits).
+
+For a **2 GB RAM instance** (e.g. Render Standard), set `GAIT_MAX_FRAMES=300` and `GAIT_MAX_WIDTH=640` in the service environment to avoid out-of-memory errors. For longer or full-resolution analysis, use a larger instance or run the app locally (no limits).
 
 **Log warnings:** You may see TensorFlow Lite or MediaPipe messages such as "Feedback manager requires a model with a single signature inference" or "NORM_RECT without IMAGE_DIMENSIONS". The app letterboxes each frame to square before pose detection to satisfy MediaPipe’s requirements and reduce the NORM_RECT warning; the annotated output video may be square (letterboxed). The "feedback manager" message is harmless and can be ignored.
 
