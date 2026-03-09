@@ -1,4 +1,15 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// ACTION REQUIRED: Add your Vercel deployment URL to the CORS allowed origins
+// in backend/main.py after first deploy.
+// Format: https://runlens.vercel.app or your custom domain.
+
+// Video uploads go from the browser directly to the Render backend (createRun uses
+// API_BASE below). They never go through a Next.js API route, so Vercel’s 4.5MB
+// payload limit does not apply. Keep uploads pointing at the backend URL only.
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
+if (!API_BASE) {
+  throw new Error("NEXT_PUBLIC_API_URL is not set. Set it in .env.local (dev) or Vercel env (production).");
+}
 
 export interface RunCreated {
   run_id: string;
@@ -36,11 +47,19 @@ export interface RunDetail {
   error_message: string | null;
 }
 
+function apiUrl(path: string, directToBackend: boolean): string {
+  if (directToBackend) return `${API_BASE}${path}`;
+  if (typeof window !== "undefined") return path;
+  return `${API_BASE}${path}`;
+}
+
 async function fetchApi<T>(
   path: string,
-  options?: RequestInit
+  options?: RequestInit,
+  directToBackend = false
 ): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
+  const url = apiUrl(path, directToBackend);
+  const res = await fetch(url, {
     ...options,
     headers: {
       ...options?.headers,
@@ -58,7 +77,7 @@ export async function createRun(formData: FormData): Promise<RunCreated> {
   return fetchApi<RunCreated>("/api/runs", {
     method: "POST",
     body: formData,
-  });
+  }, true);
 }
 
 export async function getRunStatus(id: string): Promise<RunStatus> {
