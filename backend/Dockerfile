@@ -12,5 +12,5 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 
 ENV PYTHONPATH=/app
 
-# Default: run API (override in compose for worker). Migrate then start.
-CMD ["sh", "-c", "(cd backend && alembic upgrade head) && exec uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
+# Migrate, start Celery worker in background, then API (single container for plans without separate worker).
+CMD ["sh", "-c", "(cd backend && alembic upgrade head) && celery -A backend.worker worker -l info & exec uvicorn backend.main:app --host 0.0.0.0 --port 8000"]

@@ -1,5 +1,6 @@
-# Render Blueprint: API, Celery worker, PostgreSQL, Redis
-# Set REDIS_URL, R2_*, and CORS_ORIGINS in the Render dashboard for each service.
+# Render Blueprint: API + in-process Celery worker, PostgreSQL, Redis
+# Worker runs in same container as API when separate worker service is not available on plan.
+# Set REDIS_URL, R2_*, and CORS_ORIGINS in the Render dashboard.
 
 databases:
   - name: gait-db
@@ -23,29 +24,6 @@ services:
       - key: REDIS_URL
         generateValue: true
       - key: CORS_ORIGINS
-        sync: false
-      - key: R2_ACCOUNT_ID
-        sync: false
-      - key: R2_ACCESS_KEY_ID
-        sync: false
-      - key: R2_SECRET_ACCESS_KEY
-        sync: false
-      - key: R2_BUCKET_NAME
-        sync: false
-
-  - type: worker
-    name: gait-worker
-    runtime: docker
-    dockerfilePath: backend/Dockerfile
-    dockerContext: .
-    plan: free
-    dockerCommand: celery -A backend.worker worker -l info
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: gait-db
-          property: connectionString
-      - key: REDIS_URL
         sync: false
       - key: R2_ACCOUNT_ID
         sync: false
