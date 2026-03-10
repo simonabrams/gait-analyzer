@@ -5,7 +5,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://runlens-api.onrender.com/api/:path*"
+      "destination": "https://api.runlens.io/api/:path*"
     }
   ]
 }
