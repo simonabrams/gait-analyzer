@@ -5,7 +5,7 @@ databases:
   - name: gait-db
     databaseName: gait_analyzer
     user: gait
-    plan: free
+    plan: basic-256mb
 
 services:
   - type: web
