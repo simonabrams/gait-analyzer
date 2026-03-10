@@ -12,5 +12,5 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 
 ENV PYTHONPATH=/app
 
-# Default: run API (override in compose for worker)
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Default: run API (override in compose for worker). Migrate then start.
+CMD ["sh", "-c", "(cd backend && alembic upgrade head) && exec uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
