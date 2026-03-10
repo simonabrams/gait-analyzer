@@ -33,7 +33,7 @@ services:
       - key: R2_BUCKET_NAME
         sync: false
 
-  - type: pserv
+  - type: worker
     name: gait-worker
     runtime: docker
     dockerfilePath: backend/Dockerfile
