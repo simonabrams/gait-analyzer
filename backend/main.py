@@ -38,7 +38,11 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Runlens.io API")
 
 _default_origins = "http://localhost:3000,http://127.0.0.1:3000,https://www.runlens.io,https://runlens.io"
-origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", _default_origins).split(",") if o.strip()]
+_raw = (os.environ.get("CORS_ORIGINS") or "").strip()
+origins = [o.strip() for o in (_raw or _default_origins).split(",") if o.strip()]
+if not origins:
+    origins = [o.strip() for o in _default_origins.split(",") if o.strip()]
+logger.info("CORS allow_origins: %s", origins)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,

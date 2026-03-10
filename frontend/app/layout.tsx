@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Gait Analyzer",
+  title: "Runlens.io",
   description: "Analyze your running gait from video",
 };
 
@@ -16,7 +16,7 @@ export default function RootLayout({
       <body className="antialiased min-h-screen bg-gray-50 text-gray-900">
         <header className="border-b bg-white px-4 py-3">
           <a href="/" className="text-xl font-semibold">
-            Gait Analyzer
+            Runlens.io
           </a>
         </header>
         <main className="container mx-auto px-4 py-6 max-w-5xl">
