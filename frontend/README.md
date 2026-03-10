@@ -13,7 +13,7 @@ Local dev: from repo root see main README; from here run `npm install` and `npm 
 3. Set Root Directory to: **frontend**
 4. Framework preset: Next.js (auto-detected)
 5. Add environment variable:
-   - `NEXT_PUBLIC_API_URL` = `https://runlens-api.onrender.com`
+   - `NEXT_PUBLIC_API_URL` = `https://gait-analyzer-hc0p.onrender.com/`
 6. Click Deploy
 7. After deploy, copy your Vercel URL (e.g. `https://runlens.vercel.app`)
 8. Add that URL to CORS allowed origins in `backend/main.py` on Render

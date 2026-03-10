@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Gait Analyzer API")
 
-_default_origins = "http://localhost:3000,http://127.0.0.1:3000"
+_default_origins = "http://localhost:3000,http://127.0.0.1:3000,https://runlens.vercel.app"
 origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", _default_origins).split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
