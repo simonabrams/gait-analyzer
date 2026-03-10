@@ -35,9 +35,9 @@ from backend.storage import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Gait Analyzer API")
+app = FastAPI(title="Runlens.io API")
 
-_default_origins = "http://localhost:3000,http://127.0.0.1:3000,https://api.runlens.io"
+_default_origins = "http://localhost:3000,http://127.0.0.1:3000,https://www.runlens.io,https://runlens.io"
 origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", _default_origins).split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,

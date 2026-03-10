@@ -74,15 +74,15 @@ Open http://localhost:3000, upload a video (MP4/MOV) and set height — uploads 
 
 ### Environment variables
 
-| Variable | Where | Description |
-|----------|--------|-------------|
-| `DATABASE_URL` | API, worker | PostgreSQL URL (e.g. `postgresql://user:pass@host:5432/db`) |
-| `REDIS_URL` | API, worker | Redis URL (e.g. `redis://localhost:6379/0`) |
-| `CORS_ORIGINS` | API | Allowed frontend origins (e.g. `http://localhost:3000`) |
-| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | API, worker | Cloudflare R2 (S3-compatible) |
-| `NEXT_PUBLIC_API_URL` | Frontend | Backend API base URL (e.g. `https://your-api.onrender.com`) |
-| `GAIT_MAX_FRAMES` | Worker | Max frames to process (e.g. `900` ≈ 30 s at 30 fps). Reduces memory use. |
-| `GAIT_MAX_WIDTH` | Worker | Max frame width in pixels (e.g. `1280`). Reduces memory use. |
+| Variable                                                                      | Where       | Description                                                              |
+| ----------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------ |
+| `DATABASE_URL`                                                                | API, worker | PostgreSQL URL (e.g. `postgresql://user:pass@host:5432/db`)              |
+| `REDIS_URL`                                                                   | API, worker | Redis URL (e.g. `redis://localhost:6379/0`)                              |
+| `CORS_ORIGINS`                                                                | API         | Allowed frontend origins (e.g. `http://localhost:3000`)                  |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | API, worker | Cloudflare R2 (S3-compatible)                                            |
+| `NEXT_PUBLIC_API_URL`                                                         | Frontend    | Backend API base URL (e.g. `https://api.runlens.io`)                     |
+| `GAIT_MAX_FRAMES`                                                             | Worker      | Max frames to process (e.g. `900` ≈ 30 s at 30 fps). Reduces memory use. |
+| `GAIT_MAX_WIDTH`                                                              | Worker      | Max frame width in pixels (e.g. `1280`). Reduces memory use.             |
 
 ### Worker OOM / stalled runs
 
@@ -99,14 +99,14 @@ If the worker is killed with **signal 9 (SIGKILL)** or **WorkerLostError**, the 
 
 ### API routes
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/health` | Health check |
-| POST | `/api/runs` | Create run (multipart: file, height_cm) |
-| GET | `/api/runs/{id}/status` | Poll status and progress |
-| GET | `/api/runs/{id}` | Full run detail + signed video/dashboard URLs |
-| GET | `/api/runs` | List runs (for history + charts) |
-| DELETE | `/api/runs/{id}` | Delete run and R2 objects |
+| Method | Path                    | Description                                   |
+| ------ | ----------------------- | --------------------------------------------- |
+| GET    | `/api/health`           | Health check                                  |
+| POST   | `/api/runs`             | Create run (multipart: file, height_cm)       |
+| GET    | `/api/runs/{id}/status` | Poll status and progress                      |
+| GET    | `/api/runs/{id}`        | Full run detail + signed video/dashboard URLs |
+| GET    | `/api/runs`             | List runs (for history + charts)              |
+| DELETE | `/api/runs/{id}`        | Delete run and R2 objects                     |
 
 ---
 
@@ -141,10 +141,10 @@ Then open the URL shown in the terminal (usually http://localhost:8501). Upload 
 python analyze_gait.py --video path/to/run.mp4 --height 175
 ```
 
-| Option | Description |
-|--------|-------------|
-| `--video` | Path to MP4 or MOV file (required) |
-| `--height` | Runner height in cm, used to scale distances (required) |
+| Option         | Description                                                   |
+| -------------- | ------------------------------------------------------------- |
+| `--video`      | Path to MP4 or MOV file (required)                            |
+| `--height`     | Runner height in cm, used to scale distances (required)       |
 | `--output-dir` | Where to write outputs (default: same directory as the video) |
 
 **Example with custom output directory:**
@@ -200,6 +200,7 @@ The app’s Dockerfile installs the system libraries OpenCV and MediaPipe need, 
 **Notes:** On the free tier, the app may sleep after inactivity; the first request after that can be slow. The Dockerfile runs Streamlit on port 10000 so Render’s proxy can reach it (Render’s default for Docker web services is port 10000). If you see **502 Bad Gateway**, the service may still be starting (retry after a minute), or it may have run out of memory during analysis—try a shorter/smaller video or lower `GAIT_MAX_FRAMES` / `GAIT_MAX_WIDTH`.
 
 **If the instance runs out of memory** when analyzing a video, the app limits input to **450 frames (~15 sec)** and **854px width** by default so it fits in ~512 MB–1 GB RAM. You can override this with environment variables (e.g. in Render: **Environment** tab):
+
 - `GAIT_MAX_FRAMES` — max frames to process (default `450`). Lower it (e.g. `300`) if you still get OOM.
 - `GAIT_MAX_WIDTH` — max frame width in pixels (default `854`). Lower it (e.g. `640`) to use less memory.
 
@@ -247,12 +248,12 @@ To run again later, use the same `docker run` command; you only need to run `doc
 
 All files are written next to the video (or in `--output-dir`):
 
-| File | Description |
-|------|-------------|
-| `results.json` | Full metrics, per-stride data, flags, and recommendations (source of truth) |
+| File                   | Description                                                                                  |
+| ---------------------- | -------------------------------------------------------------------------------------------- |
+| `results.json`         | Full metrics, per-stride data, flags, and recommendations (source of truth)                  |
 | `<name>_annotated.mp4` | Video with skeleton overlay and live metrics; joints involved in flagged issues shown in red |
-| `<name>_dashboard.png` | Multi-panel chart: cadence, vertical oscillation, knee angle at strike, summary score |
-| `<name>_report.txt` | Plain-text summary and recommendations (also printed to the console) |
+| `<name>_dashboard.png` | Multi-panel chart: cadence, vertical oscillation, knee angle at strike, summary score        |
+| `<name>_report.txt`    | Plain-text summary and recommendations (also printed to the console)                         |
 
 ## Video capture tips
 
@@ -283,13 +284,13 @@ All files are written next to the video (or in `--output-dir`):
 
 The report and JSON flag issues when:
 
-| Metric | Target | Flagged when |
-|--------|--------|--------------|
-| Cadence | ≥ 170 spm | Below 170 steps per minute |
-| Vertical oscillation | ≤ 10 cm | Above 10 cm |
-| Knee flexion at foot strike | ≥ 15° | Below 15° |
-| Overstriding | ≤ 10 cm | Foot strike >10 cm ahead of hip (COM) |
-| Trunk lean | ≤ 15° | Forward lean above 15° |
+| Metric                      | Target    | Flagged when                          |
+| --------------------------- | --------- | ------------------------------------- |
+| Cadence                     | ≥ 170 spm | Below 170 steps per minute            |
+| Vertical oscillation        | ≤ 10 cm   | Above 10 cm                           |
+| Knee flexion at foot strike | ≥ 15°     | Below 15°                             |
+| Overstriding                | ≤ 10 cm   | Foot strike >10 cm ahead of hip (COM) |
+| Trunk lean                  | ≤ 15°     | Forward lean above 15°                |
 
 Stride is defined as **left foot strike to next left foot strike**; foot strikes are detected from ankle landmark motion.
 
