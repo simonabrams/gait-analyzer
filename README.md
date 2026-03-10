@@ -94,7 +94,7 @@ If the worker is killed with **signal 9 (SIGKILL)** or **WorkerLostError**, the 
 
 ### Deployment
 
-- **Backend (Render):** Use `render.yaml` to create the web service (API), private service (Celery worker), and PostgreSQL. Create a **Redis** instance in the Render dashboard and set `REDIS_URL` for both API and worker. Set R2 and `CORS_ORIGINS` (your Vercel frontend URL) in the dashboard. After first deploy, run Alembic migrations (e.g. via a one-off job or locally with `DATABASE_URL` pointing at Render).
+- **Backend (Render):** Use `render.yaml` to create the web service (API), private service (Celery worker), and PostgreSQL. Create a **Redis** instance in the Render dashboard and set `REDIS_URL` for both API and worker. Set R2 in the dashboard. For CORS: either leave `CORS_ORIGINS` unset (default in code includes `https://runlens.vercel.app`) or set it to a comma-separated list including your Vercel URL. After first deploy, run Alembic migrations (e.g. via a one-off job or locally with `DATABASE_URL` pointing at Render).
 - **Frontend (Vercel):** Deploy the `frontend/` directory. Set `NEXT_PUBLIC_API_URL` to the Render API URL. The run result page (`/runs/[id]`) is server-rendered for shareable link previews (og:title, og:description).
 
 ### API routes
