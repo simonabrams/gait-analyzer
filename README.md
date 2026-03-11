@@ -1,6 +1,6 @@
-# Gait Analyzer
+# Runlens.io (formerly Gait Analyzer)
 
-Analyzes running gait from a side-view video using MediaPipe Pose and rule-based heuristics. Produces an annotated video, metrics dashboard, structured JSON results, and a text report with recommendations.
+Analyzes running gait from a side-view video using [MediaPipe Pose](https://chuoling.github.io/mediapipe/solutions/pose.html) and rule-based heuristics. Produces an annotated video, metrics dashboard, structured JSON results, and a text report with recommendations.
 
 - **Phase 2 (Streamlit):** Single-page app in the repo root (`app.py`, `streamlit run app.py`).
 - **Phase 3 (Full-stack):** Next.js frontend + FastAPI backend + Celery + PostgreSQL + Redis + Cloudflare R2. Run history, progress charts, and shareable run links.
@@ -18,11 +18,14 @@ Analyzes running gait from a side-view video using MediaPipe Pose and rule-based
 
 You need **Docker** (Desktop or Engine) and **Python** with backend deps. From the repo root:
 
+1. Copy `.env.example` to `.env` (defaults work for local; no secrets required).
+
 ```bash
+cp .env.example .env
 pip install -r backend/requirements.txt
 ```
 
-Then run (uses `docker compose` or `docker-compose`):
+2. Run (uses `docker compose` or `docker-compose`):
 
 ```bash
 ./scripts/run-local.sh
@@ -38,29 +41,38 @@ Open http://localhost:3000, upload a video (MP4/MOV) and set height — uploads 
 
 ### Local development (step by step)
 
-1. **Start Postgres and Redis:**
+1. **Copy env and install backend deps:**
 
    ```bash
-   docker-compose up -d postgres redis
+   cp .env.example .env
+   pip install -r backend/requirements.txt
    ```
 
-2. **Apply migrations** (install backend deps first: `pip install -r backend/requirements.txt`):
+2. **Start Postgres and Redis:**
+
+   ```bash
+   docker compose up -d postgres redis
+   ```
+
+   (Or `docker-compose` if your Docker version uses the hyphenated command.) Services read `POSTGRES_*`, `REDIS_URL`, etc. from `.env`.
+
+3. **Apply migrations:**
 
    ```bash
    cd backend && alembic upgrade head && cd ..
    ```
 
-   `DATABASE_URL` defaults to `postgresql://postgres:postgres@localhost:5432/gait_analyzer`.
+   `DATABASE_URL` is built from `.env` (e.g. `postgresql://postgres:changeme@localhost:5432/gait_analyzer` if you kept `.env.example` values).
 
-3. **Start API and worker** (uses local storage by default so uploads work without R2):
+4. **Start API and worker** (uses local storage by default so uploads work without R2):
 
    ```bash
-   docker-compose up api worker
+   docker compose up api worker
    ```
 
    API: http://localhost:8000. Docs: http://localhost:8000/docs.
 
-4. **Frontend** (separate terminal):
+5. **Frontend** (separate terminal):
 
    ```bash
    cd frontend
@@ -70,7 +82,7 @@ Open http://localhost:3000, upload a video (MP4/MOV) and set height — uploads 
 
    Optional: copy `frontend/.env.local.example` to `frontend/.env.local` and set `NEXT_PUBLIC_API_URL=http://localhost:8000` if your API is elsewhere.
 
-5. **R2 (optional):** To use Cloudflare R2 instead of local disk, set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` on the API and worker, and do **not** set `LOCAL_STORAGE_PATH` (or remove it from docker-compose).
+6. **R2 (optional):** To use Cloudflare R2 instead of local disk, set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` on the API and worker, and do **not** set `LOCAL_STORAGE_PATH` (or remove it from docker-compose).
 
 ### Environment variables
 
@@ -84,6 +96,18 @@ Open http://localhost:3000, upload a video (MP4/MOV) and set height — uploads 
 | `GAIT_MAX_FRAMES`                                                             | Worker      | Max frames to process (e.g. `900` ≈ 30 s at 30 fps). Reduces memory use. |
 | `GAIT_MAX_WIDTH`                                                              | Worker      | Max frame width in pixels (e.g. `1280`). Reduces memory use.             |
 
+See `.env.example` at the repo root for a full list and placeholder values. Do not commit `.env` (it is in `.gitignore`).
+
+### Testing
+
+From the repo root with backend deps installed (`pip install -r backend/requirements.txt`):
+
+```bash
+pytest backend/tests/ -v
+```
+
+Optional: `pytest backend/tests/ -v --cov=backend --cov-report=term-missing` for coverage. Lint: `ruff check backend/`.
+
 ### Worker OOM / stalled runs
 
 If the worker is killed with **signal 9 (SIGKILL)** or **WorkerLostError**, the OS likely ran out of memory (OOM). The run will stay in "processing" because the worker never got to update the DB. To avoid this:
@@ -91,6 +115,12 @@ If the worker is killed with **signal 9 (SIGKILL)** or **WorkerLostError**, the 
 - The worker runs with **concurrency 1** (`-c 1`) so only one video is processed at a time.
 - Set **GAIT_MAX_FRAMES** and **GAIT_MAX_WIDTH** on the worker (e.g. in `docker-compose.yml`) to cap memory; defaults in the stack are 900 frames and 1280 px width.
 - Use shorter or lower-resolution videos. If it still OOMs, lower `GAIT_MAX_FRAMES` (e.g. `450`) or `GAIT_MAX_WIDTH` (e.g. `854`).
+
+### Render: `FileNotFoundError` for `local_storage/raw/.../input.mp4`
+
+On Render the filesystem is **ephemeral**. If you use local storage (no R2), the API writes the uploaded video to disk and enqueues a Celery task. After a restart (e.g. missed heartbeats, deploy, free-tier spin-down) that file is gone, but the task is still in Redis—so the worker fails with `FileNotFoundError` when it tries to copy from `local_storage/raw/<run_id>/input.mp4`.
+
+**Fix:** Use **Cloudflare R2** on Render. In the Render dashboard for your web service, set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME`. Do **not** set `LOCAL_STORAGE_PATH` (or remove it). Then uploads go to R2 and the worker downloads from R2, so video processing works across restarts.
 
 ### Deployment
 
@@ -115,14 +145,15 @@ If the worker is killed with **signal 9 (SIGKILL)** or **WorkerLostError**, the 
 ### Requirements
 
 - Python 3.10+
-- See `requirements.txt` for dependencies (MediaPipe, OpenCV, NumPy, Matplotlib, Streamlit)
+- Backend pipeline (MediaPipe, OpenCV, NumPy, Matplotlib) and Streamlit
 
 ### Setup
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate   # On Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
+pip install streamlit
 ```
 
 ### Usage
@@ -294,4 +325,4 @@ The report and JSON flag issues when:
 
 Stride is defined as **left foot strike to next left foot strike**; foot strikes are detected from ankle landmark motion.
 
-The Streamlit app (`app.py`) and `job_runner.py` wrap the same pipeline: pose extraction → metrics → heuristics → visualizer → dashboard → reporter. No changes to those modules are required; the web app calls them with uploaded video and user height.
+The Streamlit app (`app.py`) imports the pipeline from `backend` (e.g. `backend.job_runner`, `backend.metrics`, `backend.heuristics`). It runs the same steps: pose extraction → metrics → heuristics → visualizer → dashboard → reporter.

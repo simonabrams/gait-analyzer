@@ -56,6 +56,11 @@ def upload_file(local_path: str | Path, r2_key: str) -> None:
 def download_file(r2_key: str, local_path: str | Path) -> None:
     if _use_local_storage():
         src = _local_path(r2_key)
+        if not src.is_file():
+            raise FileNotFoundError(
+                f"Video not found at {src}. "
+                "On Render/production the filesystem is ephemeral—configure R2 (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME) and do not set LOCAL_STORAGE_PATH."
+            )
         Path(local_path).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(src), str(local_path))
         return
