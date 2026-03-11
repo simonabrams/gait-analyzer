@@ -81,17 +81,17 @@ export async function createRun(formData: FormData): Promise<RunCreated> {
 }
 
 export async function getRunStatus(id: string): Promise<RunStatus> {
-  return fetchApi<RunStatus>(`/api/runs/${id}/status`);
+  return fetchApi<RunStatus>(`/api/runs/${id}/status`, undefined, true);
 }
 
 export async function getRun(id: string): Promise<RunDetail> {
-  return fetchApi<RunDetail>(`/api/runs/${id}`);
+  return fetchApi<RunDetail>(`/api/runs/${id}`, undefined, true);
 }
 
 export async function listRuns(): Promise<RunListItem[]> {
-  return fetchApi<RunListItem[]>("/api/runs");
+  return fetchApi<RunListItem[]>("/api/runs", undefined, true);
 }
 
 export async function deleteRun(id: string): Promise<void> {
-  return fetchApi<void>(`/api/runs/${id}`, { method: "DELETE" });
+  return fetchApi<void>(`/api/runs/${id}`, { method: "DELETE" }, true);
 }
