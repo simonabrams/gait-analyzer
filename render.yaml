@@ -33,3 +33,8 @@ services:
         sync: false
       - key: R2_BUCKET_NAME
         sync: false
+      # Optional: set to reduce worker memory (e.g. GAIT_MAX_FRAMES=600, GAIT_MAX_WIDTH=960)
+      - key: GAIT_MAX_FRAMES
+        sync: false
+      - key: GAIT_MAX_WIDTH
+        sync: false
