@@ -33,6 +33,8 @@ app = celery.Celery(
 app.conf.task_serializer = "json"
 app.conf.result_serializer = "json"
 app.conf.accept_content = ["json"]
+# Default to 1 to avoid OOM when API and worker share a container (CLI -c overrides this).
+app.conf.worker_concurrency = int(os.environ.get("CELERY_WORKER_CONCURRENCY", "1"))
 
 
 def _update_progress(run_id: str, progress_pct: int) -> None:
