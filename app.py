@@ -7,7 +7,7 @@ import os
 import tempfile
 import streamlit as st
 
-from about_content import render_about_content
+from backend.about_content import render_about_content
 
 FILMING_TIPS = """
 - **Side view only** — film the runner from the left or right, not front or back.
@@ -95,7 +95,7 @@ def main():
             max_frames = 450
             max_width = 854
         try:
-            from job_runner import run_analysis
+            from backend.job_runner import run_analysis
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
                 tmp.write(video_file.getvalue())
                 video_path = tmp.name

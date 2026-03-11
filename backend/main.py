@@ -24,8 +24,6 @@ from backend.schemas import (
     RunStatusResponse,
 )
 from backend.storage import (
-    annotated_video_key,
-    dashboard_image_key,
     delete_object,
     generate_presigned_url,
     raw_video_key,
@@ -93,7 +91,7 @@ def serve_local_artifact(run_id: str, filename: str):
 
 
 @app.post("/api/runs", response_model=RunCreatedResponse)
-def create_run(
+async def create_run(
     file: UploadFile = File(...),
     height_cm: int = Form(..., ge=100, le=250),
     db: Session = Depends(get_db),
@@ -101,7 +99,7 @@ def create_run(
     suffix = (file.filename or "").split(".")[-1].lower()
     if suffix not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, "Only MP4 and MOV files are allowed")
-    content = file.file.read()
+    content = await file.read(MAX_FILE_SIZE + 1)
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(400, "File too large")
     run_id = uuid.uuid4()

@@ -110,7 +110,7 @@ def annotate_single_frame(frame, frame_idx, pose_by_idx, results, frame_flags=No
 
     if pose and pose.get("landmarks"):
         lm = pose["landmarks"]
-        pts = [(int(l["x"] * w), int(l["y"] * h)) for l in lm]
+        pts = [(int(lm_item["x"] * w), int(lm_item["y"] * h)) for lm_item in lm]
         for (a, b) in POSE_CONNECTIONS:
             if a < len(pts) and b < len(pts) and pts[a] and pts[b]:
                 cv2.line(img, pts[a], pts[b], (0, 255, 0), 2)

@@ -16,7 +16,6 @@ from backend.storage import (
     annotated_video_key,
     dashboard_image_key,
     download_file,
-    raw_video_key,
     upload_file,
 )
 from backend.video_preprocessor import preprocess_video

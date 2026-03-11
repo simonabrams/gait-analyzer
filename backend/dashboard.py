@@ -11,7 +11,7 @@ def create_dashboard(results):
     fig = plt.figure(figsize=(14, 10))
     strides = results.get("strides", [])
     summary = results.get("summary", {})
-    flags = results.get("flags", [])
+    results.get("flags", [])
 
     ax1 = fig.add_subplot(2, 2, 1)
     if strides:

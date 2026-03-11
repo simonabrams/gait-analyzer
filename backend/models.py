@@ -3,9 +3,7 @@ SQLAlchemy ORM models for gait analyzer.
 """
 import enum
 import uuid
-from datetime import datetime
-from typing import Any
-
+from datetime import datetime, timezone
 from sqlalchemy import Column, DateTime, Enum, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import declarative_base
@@ -23,7 +21,7 @@ class Run(Base):
     __tablename__ = "runs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     height_cm = Column(Integer, nullable=False)
     status = Column(Enum(RunStatus), nullable=False, default=RunStatus.processing)
     progress_pct = Column(Integer, default=0, nullable=False)

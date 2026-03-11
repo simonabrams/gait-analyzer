@@ -14,12 +14,12 @@ from pathlib import Path
 import cv2
 import matplotlib.pyplot as plt
 
-from dashboard import create_dashboard
-from heuristics import evaluate_heuristics
-from metrics import compute_metrics
-from pose_extractor import extract_poses
-from reporter import generate_report
-from visualizer import generate_annotated_frames
+from backend.dashboard import create_dashboard
+from backend.heuristics import evaluate_heuristics
+from backend.metrics import compute_metrics
+from backend.pose_extractor import extract_poses
+from backend.reporter import generate_report
+from backend.visualizer import generate_annotated_frames
 
 
 def _sanitize_fps_for_writer(fps):
