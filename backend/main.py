@@ -56,9 +56,14 @@ app.add_middleware(
 @app.exception_handler(Exception)
 def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled exception: %s", exc)
+    headers = {}
+    origin = request.headers.get("origin")
+    if origin and origin in origins:
+        headers["Access-Control-Allow-Origin"] = origin
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error. Check server logs."},
+        headers=headers,
     )
 
 ALLOWED_EXTENSIONS = {"mp4", "mov"}
