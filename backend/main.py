@@ -210,9 +210,12 @@ def delete_run(run_id: uuid.UUID, db: Session = Depends(get_db)):
     run = _get_run(db, run_id)
     if not run:
         raise HTTPException(404, "Run not found")
-    for key in [run.raw_video_r2_key, run.annotated_video_r2_key, run.dashboard_image_r2_key]:
-        if key:
-            delete_object(key)
+    try:
+        for key in [run.raw_video_r2_key, run.annotated_video_r2_key, run.dashboard_image_r2_key]:
+            if key:
+                delete_object(key)
+    except Exception as e:
+        logger.warning("R2/local delete failed for run %s: %s", run_id, e)
     db.delete(run)
     db.commit()
     return None

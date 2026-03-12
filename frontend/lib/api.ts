@@ -11,6 +11,9 @@ if (!API_BASE) {
   throw new Error("NEXT_PUBLIC_API_URL is not set. Set it in .env.local (dev) or Vercel env (production).");
 }
 
+/** Replace with a real sample run ID when you have an analysis to showcase. */
+export const SAMPLE_RUN_ID = "ab242812-582f-4107-b41c-0011087cd667";
+
 export interface RunCreated {
   run_id: string;
   status: string;
@@ -92,6 +95,11 @@ export async function listRuns(): Promise<RunListItem[]> {
   return fetchApi<RunListItem[]>("/api/runs", undefined, true);
 }
 
-export async function deleteRun(id: string): Promise<void> {
-  return fetchApi<void>(`/api/runs/${id}`, { method: "DELETE" }, true);
+export async function deleteRun(id: string): Promise<boolean> {
+  try {
+    await fetchApi<void>(`/api/runs/${id}`, { method: "DELETE" }, true);
+    return true;
+  } catch {
+    return false;
+  }
 }

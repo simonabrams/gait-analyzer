@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import Nav from "@/components/Nav";
 
 export const metadata: Metadata = {
   title: "Runlens.io",
@@ -13,13 +14,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased min-h-screen bg-gray-50 text-gray-900">
-        <header className="border-b bg-white px-4 py-3">
-          <a href="/" className="text-xl font-semibold">
-            Runlens.io
-          </a>
-        </header>
-        <main className="container mx-auto px-4 py-6 max-w-5xl">
+      <body className="antialiased min-h-screen bg-background text-gray-100 font-sans">
+        <Nav />
+        <main className="container mx-auto px-4 pt-14 max-w-6xl min-h-screen">
           {children}
         </main>
       </body>

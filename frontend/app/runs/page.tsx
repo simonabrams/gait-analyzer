@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { listRuns, type RunListItem } from "@/lib/api";
+import { listRuns, deleteRun, type RunListItem } from "@/lib/api";
 import ProgressCharts from "@/components/ProgressCharts";
 
 function formatDate(created_at: string) {
@@ -12,77 +12,158 @@ function formatDate(created_at: string) {
   });
 }
 
+function TrashIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+  );
+}
+
 export default function RunsPage() {
   const [runs, setRuns] = useState<RunListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [errorId, setErrorId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadRuns = () => {
     listRuns()
       .then(setRuns)
       .catch(() => setRuns([]))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadRuns();
   }, []);
 
+  const handleDelete = async (runId: string) => {
+    setConfirmingId(null);
+    setErrorId(null);
+    setDeletingId(runId);
+    const ok = await deleteRun(runId);
+    setDeletingId(null);
+    if (ok) {
+      setRemovingId(runId);
+      setTimeout(() => {
+        setRuns((prev) => prev.filter((r) => r.run_id !== runId));
+        setRemovingId(null);
+      }, 300);
+    } else {
+      setErrorId(runId);
+    }
+  };
+
   if (loading) {
-    return <p className="text-gray-600">Loading run history...</p>;
+    return <p className="text-gray-400">Loading run history...</p>;
+  }
+
+  if (runs.length === 0) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Your Runs</h1>
+          <p className="text-gray-400 mt-1">Track your progress over time — every run is saved here.</p>
+        </div>
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <p className="text-5xl mb-4">🎥</p>
+          <h2 className="text-xl font-semibold text-white mb-2">No runs yet</h2>
+          <p className="text-gray-400 mb-6">Upload your first video to get started</p>
+          <Link
+            href="/#upload"
+            className="bg-primary text-background font-medium px-6 py-3 rounded-lg hover:opacity-90 transition-opacity"
+          >
+            Analyze a Run →
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Run history</h1>
-        <Link href="/" className="text-blue-600 hover:underline">
-          Upload new
-        </Link>
+      <div>
+        <h1 className="text-2xl font-bold text-white">Your Runs</h1>
+        <p className="text-gray-400 mt-1">Track your progress over time — every run is saved here.</p>
       </div>
 
       <ProgressCharts runs={runs} />
 
       <div>
-        <h2 className="text-lg font-semibold mb-3">Runs</h2>
-        <div className="border rounded-lg overflow-hidden bg-white shadow-sm">
+        <h2 className="text-lg font-semibold text-white mb-3">Runs</h2>
+        <div className="border border-white/10 rounded-lg overflow-hidden bg-secondary">
           <table className="w-full text-sm">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="text-left p-3">Date</th>
-                <th className="text-left p-3">Cadence</th>
-                <th className="text-left p-3">V. Oscillation</th>
-                <th className="text-left p-3">Knee Angle</th>
-                <th className="text-left p-3">Issues</th>
-                <th className="text-left p-3">Link</th>
+            <thead>
+              <tr className="border-b border-white/10">
+                <th className="text-left p-3 text-gray-300 font-medium">Date</th>
+                <th className="text-left p-3 text-gray-300 font-medium">Cadence</th>
+                <th className="text-left p-3 text-gray-300 font-medium">V. Oscillation</th>
+                <th className="text-left p-3 text-gray-300 font-medium">Knee Angle</th>
+                <th className="text-left p-3 text-gray-300 font-medium">Issues</th>
+                <th className="text-left p-3 text-gray-300 font-medium">Link</th>
+                <th className="text-left p-3 w-24" aria-label="Delete" />
               </tr>
             </thead>
             <tbody>
-              {runs.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="p-6 text-center text-gray-500">
-                    No runs yet.
+              {runs.map((r) => (
+                <tr
+                  key={r.run_id}
+                  className={`border-t border-white/5 hover:bg-white/5 cursor-pointer transition-opacity duration-300 ${
+                    removingId === r.run_id ? "opacity-0" : ""
+                  }`}
+                  onClick={() => window.location.assign(`/runs/${r.run_id}`)}
+                >
+                  <td className="p-3 text-gray-300">{formatDate(r.created_at)}</td>
+                  <td className="p-3 text-gray-300">{r.cadence_avg ?? "—"}</td>
+                  <td className="p-3 text-gray-300">{r.vertical_osc_avg_cm ?? "—"}</td>
+                  <td className="p-3 text-gray-300">{r.knee_angle_strike_avg_deg ?? "—"}</td>
+                  <td className="p-3 text-gray-300">{r.flags_count}</td>
+                  <td className="p-3">
+                    <Link
+                      href={`/runs/${r.run_id}`}
+                      className="text-primary hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      View
+                    </Link>
+                  </td>
+                  <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                    {errorId === r.run_id ? (
+                      <span className="text-red-400 text-xs">Delete failed. Try again.</span>
+                    ) : confirmingId === r.run_id ? (
+                      <span className="flex gap-2">
+                        <button
+                          type="button"
+                          className="text-gray-400 hover:text-white text-xs"
+                          onClick={() => setConfirmingId(null)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="text-red-400 hover:text-red-300 text-xs font-medium"
+                          onClick={() => handleDelete(r.run_id)}
+                        >
+                          Yes, delete
+                        </button>
+                      </span>
+                    ) : deletingId === r.run_id ? (
+                      <span className="inline-block w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" aria-hidden />
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-gray-400 hover:text-red-400 p-1"
+                        onClick={() => setConfirmingId(r.run_id)}
+                        aria-label="Delete run"
+                      >
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
+                    )}
                   </td>
                 </tr>
-              ) : (
-                runs.map((r) => (
-                  <tr
-                    key={r.run_id}
-                    className="border-t hover:bg-gray-50 cursor-pointer"
-                    onClick={() => window.location.assign(`/runs/${r.run_id}`)}
-                  >
-                    <td className="p-3">{formatDate(r.created_at)}</td>
-                    <td className="p-3">{r.cadence_avg ?? "—"}</td>
-                    <td className="p-3">{r.vertical_osc_avg_cm ?? "—"}</td>
-                    <td className="p-3">{r.knee_angle_strike_avg_deg ?? "—"}</td>
-                    <td className="p-3">{r.flags_count}</td>
-                    <td className="p-3">
-                      <Link
-                        href={`/runs/${r.run_id}`}
-                        className="text-blue-600 hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        View
-                      </Link>
-                    </td>
-                  </tr>
-                ))
-              )}
+              ))}
             </tbody>
           </table>
         </div>
