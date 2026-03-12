@@ -6,7 +6,7 @@
 // API_BASE below). They never go through a Next.js API route, so Vercel’s 4.5MB
 // payload limit does not apply. Keep uploads pointing at the backend URL only.
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL;
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
 if (!API_BASE) {
   throw new Error("NEXT_PUBLIC_API_URL is not set. Set it in .env.local (dev) or Vercel env (production).");
 }
