@@ -1,6 +1,7 @@
 # Render Blueprint: API + in-process Celery worker, PostgreSQL, Redis
 # Worker runs in same container as API when separate worker service is not available on plan.
 # Set REDIS_URL, R2_*, and CORS_ORIGINS in the Render dashboard.
+# If you add a separate worker service (e.g. runlens), set the same R2_* and REDIS_URL there.
 
 databases:
   - name: gait-db

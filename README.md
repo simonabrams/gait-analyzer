@@ -120,7 +120,7 @@ If the worker is killed with **signal 9 (SIGKILL)** or **WorkerLostError**, the 
 
 On Render the filesystem is **ephemeral**. If you use local storage (no R2), the API writes the uploaded video to disk and enqueues a Celery task. After a restart (e.g. missed heartbeats, deploy, free-tier spin-down) that file is gone, but the task is still in Redis—so the worker fails with `FileNotFoundError` when it tries to copy from `local_storage/raw/<run_id>/input.mp4`.
 
-**Fix:** Use **Cloudflare R2** on Render. In the Render dashboard for your web service, set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME`. Do **not** set `LOCAL_STORAGE_PATH` (or remove it). Then uploads go to R2 and the worker downloads from R2, so video processing works across restarts.
+**Fix:** Use **Cloudflare R2** on Render. In the Render dashboard, set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME` on **both** the API (gait-api) and worker (runlens) services. Do **not** set `LOCAL_STORAGE_PATH` on either. Then uploads go to R2 and the worker downloads from R2, so video processing works across restarts. (On Render, local storage is disabled by default so missing R2 yields a clear error.)
 
 ### Deployment
 
