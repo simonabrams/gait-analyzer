@@ -18,11 +18,11 @@ export default function MetricCards({ summary }: MetricCardsProps) {
         return (
           <div
             key={key}
-            className="bg-white border rounded-lg p-4 shadow-sm"
+            className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"
           >
             <div className="text-sm text-gray-600">{label}</div>
-            <div className="text-2xl font-semibold mt-1">{display}</div>
-            <div className="text-xs text-gray-500 mt-1">Target: {target}</div>
+            <div className="text-2xl font-semibold text-gray-900 mt-1">{display}</div>
+            <div className="text-xs text-gray-700 mt-1">Target: {target}</div>
           </div>
         );
       })}

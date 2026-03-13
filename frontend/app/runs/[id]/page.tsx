@@ -77,10 +77,10 @@ export default async function RunResultPage({ params }: Props) {
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">Run result</h1>
+        <h1 className="text-2xl font-bold text-white">Run result</h1>
         <div className="flex items-center gap-2">
           <ShareButton />
-          <Link href="/runs" className="px-4 py-2 text-sm text-gray-600 hover:underline">
+          <Link href="/runs" className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors">
             Run history
           </Link>
         </div>

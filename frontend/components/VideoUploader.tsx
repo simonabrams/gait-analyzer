@@ -79,12 +79,12 @@ export default function VideoUploader({
       <div
         {...getRootProps()}
         className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-          isDragActive ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-white hover:border-gray-400"
+          isDragActive ? "border-primary bg-primary/10" : "border-gray-400 bg-white hover:border-gray-500"
         }`}
       >
         <input {...getInputProps()} />
         {file ? (
-          <p className="text-gray-700">{file.name}</p>
+          <p className="text-gray-900">{file.name}</p>
         ) : (
           <p className="text-gray-600">
             {isDragActive ? "Drop the video here" : "Drag and drop a video (MP4/MOV), or click to select"}
@@ -92,14 +92,14 @@ export default function VideoUploader({
         )}
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Height (cm)</label>
+        <label className="block text-sm font-medium text-gray-200 mb-1">Height (cm)</label>
         <input
           type="number"
           min={100}
           max={250}
           value={height}
           onChange={(e) => setHeight(Number(e.target.value))}
-          className="border rounded px-3 py-2 w-24"
+          className="border border-gray-300 rounded px-3 py-2 w-24 bg-white text-gray-900"
         />
       </div>
       {preprocessingWarning && (
@@ -111,11 +111,11 @@ export default function VideoUploader({
         <div>
           <div className="h-2 bg-gray-200 rounded overflow-hidden">
             <div
-              className="h-full bg-blue-600 transition-all duration-300"
+              className="h-full bg-primary transition-all duration-300"
               style={{ width: `${progress}%` }}
             />
           </div>
-          <p className="text-sm text-gray-600 mt-1">{status} {progress}%</p>
+          <p className="text-sm text-gray-300 mt-1">{status} {progress}%</p>
         </div>
       )}
       {error && <p className="text-red-600 text-sm">{error}</p>}
@@ -123,7 +123,7 @@ export default function VideoUploader({
         type="button"
         onClick={submit}
         disabled={!file || progress !== null}
-        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="px-4 py-2 bg-primary text-background font-medium rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
       >
         Analyze
       </button>
