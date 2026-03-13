@@ -64,7 +64,7 @@ export default function HomePage() {
             <VideoUploader onComplete={handleComplete} />
           </div>
           <p className="mt-4 text-sm text-gray-400 text-center">
-            💡 Best results: film from the side, full body visible, 30–60 seconds of steady running
+            💡 Best results: film from the side, full body visible, 30–60 seconds of steady running on a treadmill
           </p>
           {hasRuns && (
             <p className="mt-3 text-center">
@@ -82,7 +82,7 @@ export default function HomePage() {
           <div className="bg-secondary rounded-xl p-6 border border-white/10">
             <p className="text-2xl mb-2">🎥</p>
             <h3 className="font-semibold text-white mb-2">Film your run</h3>
-            <p className="text-gray-400 text-sm">30–60 seconds from the side. Your phone works great.</p>
+            <p className="text-gray-400 text-sm">30–60 seconds from the side, on a treadmill. Your phone works great.</p>
           </div>
           <div className="bg-secondary rounded-xl p-6 border border-white/10">
             <p className="text-2xl mb-2">⬆️</p>

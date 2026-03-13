@@ -58,14 +58,16 @@ function apiUrl(path: string, directToBackend: boolean): string {
 
 async function fetchApi<T>(
   path: string,
-  options?: RequestInit,
+  options?: RequestInit & { cache?: RequestCache },
   directToBackend = false
 ): Promise<T> {
   const url = apiUrl(path, directToBackend);
+  const { cache, ...restOptions } = options ?? {};
   const res = await fetch(url, {
-    ...options,
+    ...restOptions,
+    ...(cache !== undefined && { cache }),
     headers: {
-      ...options?.headers,
+      ...restOptions.headers,
     },
   });
   if (!res.ok) {
@@ -88,7 +90,7 @@ export async function getRunStatus(id: string): Promise<RunStatus> {
 }
 
 export async function getRun(id: string): Promise<RunDetail> {
-  return fetchApi<RunDetail>(`/api/runs/${id}`, undefined, true);
+  return fetchApi<RunDetail>(`/api/runs/${id}`, { cache: "no-store" }, true);
 }
 
 export async function listRuns(): Promise<RunListItem[]> {

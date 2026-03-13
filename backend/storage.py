@@ -2,6 +2,7 @@
 Cloudflare R2 upload/download and presigned URL generation (S3-compatible API).
 When LOCAL_STORAGE_PATH is set and R2 is not configured, uses local disk instead (for dev).
 """
+import logging
 import os
 import shutil
 from pathlib import Path
@@ -87,6 +88,9 @@ def generate_presigned_url(r2_key: str, expiration: int = 3600) -> str:
         "get_object",
         Params={"Bucket": R2_BUCKET_NAME, "Key": r2_key},
         ExpiresIn=expiration,
+    )
+    logging.getLogger(__name__).info(
+        "R2 presigned URL generated bucket=%s key=%s", R2_BUCKET_NAME, r2_key
     )
     return url
 

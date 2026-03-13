@@ -122,6 +122,16 @@ On Render the filesystem is **ephemeral**. If you use local storage (no R2), the
 
 **Fix:** Use **Cloudflare R2** on Render. In the Render dashboard, set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME` on **both** the API (gait-api) and worker (runlens) services. Do **not** set `LOCAL_STORAGE_PATH` on either. Then uploads go to R2 and the worker downloads from R2, so video processing works across restarts. (On Render, local storage is disabled by default so missing R2 yields a clear error.)
 
+### 403 Forbidden on R2 asset URLs (dashboard.png / annotated.mp4)
+
+The frontend loads video and dashboard images via presigned URLs. A 403 means R2 rejected the request—usually credentials or permissions.
+
+**Checks:**
+
+1. **Credentials** — In Cloudflare Dashboard → R2 → Manage R2 API Tokens, confirm the token wasn’t rotated or recreated. If it was, update `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` in the **gait-api** Render service (Environment) and redeploy. API and worker must use the same R2 credentials.
+2. **Token permissions** — The R2 API token must have **Object Read & Write** for the bucket used by `R2_BUCKET_NAME`.
+3. **gait-api logs** — After deploying, open a run detail page and check Render logs for `R2 presigned URL generated bucket=... key=...`. That confirms the API is using R2 and the key; if you see it and the browser still gets 403, the problem is the R2 token (wrong key or insufficient permissions).
+
 ### Deployment
 
 - **Backend (Render):** Use `render.yaml` to create the web service (API), private service (Celery worker), and PostgreSQL. Create a **Redis** instance in the Render dashboard and set `REDIS_URL` for both API and worker. Set R2 in the dashboard. For CORS: either leave `CORS_ORIGINS` unset (default in code includes `https://runlens.vercel.app`) or set it to a comma-separated list including your Vercel URL. The API Docker image runs `alembic upgrade head` on startup, so migrations apply on each deploy. If you deployed before that change, run once in Render Shell: `cd backend && alembic upgrade head` (script_location is relative to the config, so run from `backend/`).
