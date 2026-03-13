@@ -5,6 +5,7 @@ import logging
 import os
 import tempfile
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 import celery
@@ -72,6 +73,12 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
             str(video_path), preprocessed_path, target_height=target_height
         )
         run.preprocessing_meta = preprocess_meta
+        raw_creation = preprocess_meta.get("creation_time_iso")
+        run.recorded_at = (
+            datetime.fromisoformat(raw_creation.replace("Z", "+00:00"))
+            if raw_creation
+            else None
+        )
         db.commit()
         logger.info(
             "Preprocessing: %s -> %s, output_size_mb=%.1f",

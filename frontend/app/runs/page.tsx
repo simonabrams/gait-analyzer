@@ -97,7 +97,8 @@ export default function RunsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/10">
-                <th className="text-left p-3 text-gray-300 font-medium">Date</th>
+                <th className="text-left p-3 text-gray-300 font-medium">Uploaded</th>
+                <th className="text-left p-3 text-gray-300 font-medium">Recorded</th>
                 <th className="text-left p-3 text-gray-300 font-medium">Cadence</th>
                 <th className="text-left p-3 text-gray-300 font-medium">V. Oscillation</th>
                 <th className="text-left p-3 text-gray-300 font-medium">Knee Angle</th>
@@ -116,6 +117,7 @@ export default function RunsPage() {
                   onClick={() => window.location.assign(`/runs/${r.run_id}`)}
                 >
                   <td className="p-3 text-gray-300">{formatDate(r.created_at)}</td>
+                  <td className="p-3 text-gray-300">{r.recorded_at ? formatDate(r.recorded_at) : "—"}</td>
                   <td className="p-3 text-gray-300">{r.cadence_avg ?? "—"}</td>
                   <td className="p-3 text-gray-300">{r.vertical_osc_avg_cm ?? "—"}</td>
                   <td className="p-3 text-gray-300">{r.knee_angle_strike_avg_deg ?? "—"}</td>

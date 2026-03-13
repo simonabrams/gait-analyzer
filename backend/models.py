@@ -31,3 +31,4 @@ class Run(Base):
     results_json = Column(JSONB, nullable=True)
     error_message = Column(Text, nullable=True)
     preprocessing_meta = Column(JSONB, nullable=True)
+    recorded_at = Column(DateTime(timezone=True), nullable=True)

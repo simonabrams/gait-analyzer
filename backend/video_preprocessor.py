@@ -5,6 +5,8 @@ VIDEO_MAX_HEIGHT=480 via env without redeploying.
 """
 import logging
 import os
+import subprocess
+from datetime import datetime, timezone
 
 import cv2
 
@@ -26,6 +28,38 @@ def _get_target_height() -> int:
         return 720
 
 
+def get_video_creation_time(input_path: str) -> datetime | None:
+    """Read creation_time from container metadata via ffprobe. Returns UTC datetime or None."""
+    try:
+        out = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=creation_time",
+                "-of",
+                "csv=p=0",
+                input_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if out.returncode != 0 or not out.stdout or not out.stdout.strip():
+            return None
+        raw = out.stdout.strip()
+        if raw.endswith("Z"):
+            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if "+" in raw or raw.count("-") > 2:
+            return datetime.fromisoformat(raw)
+        return datetime.fromisoformat(raw + "+00:00")
+    except (subprocess.TimeoutExpired, ValueError, FileNotFoundError) as e:
+        logger.debug("Could not get video creation_time for %s: %s", input_path, e)
+        return None
+
+
 def preprocess_video(
     input_path: str,
     output_path: str,
@@ -33,6 +67,8 @@ def preprocess_video(
 ) -> dict:
     if target_height is None:
         target_height = _get_target_height()
+
+    creation_time = get_video_creation_time(input_path)
 
     cap = cv2.VideoCapture(input_path)
     if not cap.isOpened():
@@ -86,7 +122,7 @@ def preprocess_video(
 
     output_size_mb = round(os.path.getsize(output_path) / (1024 * 1024), 1)
 
-    return {
+    result = {
         "original_resolution": orig_res,
         "output_resolution": out_res,
         "original_duration_sec": round(orig_duration_sec, 1),
@@ -95,3 +131,6 @@ def preprocess_video(
         "was_trimmed": was_trimmed,
         "output_size_mb": output_size_mb,
     }
+    if creation_time is not None:
+        result["creation_time_iso"] = creation_time.isoformat()
+    return result

@@ -172,6 +172,7 @@ def get_run(run_id: uuid.UUID, db: Session = Depends(get_db)):
     detail = RunDetail(
         run_id=run.id,
         created_at=run.created_at,
+        recorded_at=run.recorded_at,
         height_cm=run.height_cm,
         status=run.status.value,
         results=run.results_json,
@@ -196,6 +197,7 @@ def list_runs(db: Session = Depends(get_db)):
             RunListItem(
                 run_id=r.id,
                 created_at=r.created_at,
+                recorded_at=r.recorded_at,
                 cadence_avg=summary.get("cadence_avg"),
                 vertical_osc_avg_cm=summary.get("vertical_osc_avg_cm"),
                 knee_angle_strike_avg_deg=summary.get("knee_angle_strike_avg_deg"),

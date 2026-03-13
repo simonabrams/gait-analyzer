@@ -28,6 +28,7 @@ export interface RunStatus {
 export interface RunListItem {
   run_id: string;
   created_at: string;
+  recorded_at: string | null;
   cadence_avg: number | null;
   vertical_osc_avg_cm: number | null;
   knee_angle_strike_avg_deg: number | null;
@@ -37,6 +38,7 @@ export interface RunListItem {
 export interface RunDetail {
   run_id: string;
   created_at: string;
+  recorded_at: string | null;
   height_cm: number;
   status: string;
   results: {

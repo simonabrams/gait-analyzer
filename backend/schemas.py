@@ -23,6 +23,7 @@ class RunListItem(BaseModel):
 
     run_id: UUID
     created_at: datetime
+    recorded_at: Optional[datetime] = None
     cadence_avg: Optional[float] = None
     vertical_osc_avg_cm: Optional[float] = None
     knee_angle_strike_avg_deg: Optional[float] = None
@@ -37,6 +38,7 @@ class RunCreatedResponse(BaseModel):
 class RunDetail(BaseModel):
     run_id: UUID
     created_at: datetime
+    recorded_at: Optional[datetime] = None
     height_cm: int
     status: str
     results: Optional[dict[str, Any]] = None
