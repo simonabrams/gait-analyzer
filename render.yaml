@@ -34,6 +34,10 @@ services:
         sync: false
       - key: R2_BUCKET_NAME
         sync: false
+      # Shared secret for upload/delete endpoints. Set to a random string and
+      # also set NEXT_PUBLIC_UPLOAD_TOKEN to the same value in Vercel.
+      - key: UPLOAD_TOKEN
+        sync: false
       # Optional: set to reduce worker memory (e.g. GAIT_MAX_FRAMES=600, GAIT_MAX_WIDTH=960)
       - key: GAIT_MAX_FRAMES
         sync: false
