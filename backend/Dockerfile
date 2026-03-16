@@ -10,6 +10,9 @@ WORKDIR /app
 COPY backend/ backend/
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
+RUN useradd --no-create-home --shell /bin/false appuser && chown -R appuser /app
+USER appuser
+
 ENV PYTHONPATH=/app
 
 # Migrate, start Celery worker in background, then API (single container for plans without separate worker).
