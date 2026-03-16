@@ -82,14 +82,19 @@ def extract_poses(frames, model_complexity=1, start_frame_idx=0, timestamps_ms=N
     landmarker = pose_landmarker.PoseLandmarker.create_from_options(opts)
 
     out = []
+    last_ts_int = -1
     for i, frame in enumerate(frames):
         idx = start_frame_idx + i
         ts_ms = float(timestamps_ms[i]) if timestamps_ms is not None and i < len(timestamps_ms) else float(i * 33)
+        # MediaPipe requires strictly monotonically increasing integer timestamps.
+        # cap.get(CAP_PROP_POS_MSEC) can return equal values on VFR video after truncation.
+        ts_int = max(last_ts_int + 1, int(ts_ms))
+        last_ts_int = ts_int
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        result = landmarker.detect_for_video(mp_img, int(ts_ms))
+        result = landmarker.detect_for_video(mp_img, ts_int)
         if not result.pose_landmarks:
-            out.append({"frame_idx": idx, "timestamp_ms": ts_ms, "landmarks": None})
+            out.append({"frame_idx": idx, "timestamp_ms": ts_int, "landmarks": None})
             continue
         pose_lms = result.pose_landmarks[0]
         landmarks = [
@@ -101,6 +106,6 @@ def extract_poses(frames, model_complexity=1, start_frame_idx=0, timestamps_ms=N
             }
             for lm in pose_lms
         ]
-        out.append({"frame_idx": idx, "timestamp_ms": ts_ms, "landmarks": landmarks})
+        out.append({"frame_idx": idx, "timestamp_ms": ts_int, "landmarks": landmarks})
     landmarker.close()
     return out
