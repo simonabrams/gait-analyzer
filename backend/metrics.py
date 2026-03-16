@@ -7,6 +7,9 @@ schema (summary, strides). No file I/O.
 import math
 from datetime import datetime, timezone
 
+_STRIDE_MIN_SEC = 0.25
+_STRIDE_MAX_SEC = 1.5
+
 LEFT_HIP, RIGHT_HIP = 23, 24
 LEFT_KNEE, RIGHT_KNEE = 25, 26
 LEFT_ANKLE, RIGHT_ANKLE = 27, 28
@@ -31,6 +34,17 @@ def compute_metrics(pose_frames, height_cm, fps, video_file=""):
         return _empty_results(height_cm, video_file)
 
     summary = _compute_summary(strides)
+
+    ankle_vis = []
+    for p in valid:
+        lm = p["landmarks"]
+        ankle_vis.append(lm[LEFT_ANKLE].get("visibility", 1.0))
+        ankle_vis.append(lm[RIGHT_ANKLE].get("visibility", 1.0))
+    fps_score = min(fps / 60.0, 1.0)
+    vis_score = sum(ankle_vis) / len(ankle_vis) if ankle_vis else 1.0
+    stride_score = min(len(strides) / 5.0, 1.0)
+    summary["cadence_confidence"] = round((fps_score + vis_score + stride_score) / 3.0, 3)
+
     return {
         "meta": {
             "height_cm": height_cm,
@@ -75,6 +89,30 @@ def _pixel_scale_from_height(pose_frames_with_landmarks, height_cm):
     return height_cm / avg_norm_height
 
 
+def _savgol_or_passthrough(ys, window=11, polyorder=2):
+    """Apply Savitzky-Golay smoothing to a signal that may contain None values."""
+    if len(ys) < window:
+        return ys
+    try:
+        from scipy.signal import savgol_filter
+        import numpy as np
+    except ImportError:
+        return ys
+
+    filled = list(ys)
+    for i in range(1, len(filled)):
+        if filled[i] is None and filled[i - 1] is not None:
+            filled[i] = filled[i - 1]
+    for i in range(len(filled) - 2, -1, -1):
+        if filled[i] is None and filled[i + 1] is not None:
+            filled[i] = filled[i + 1]
+    if any(v is None for v in filled):
+        return ys
+
+    smoothed = savgol_filter(np.array(filled, dtype=float), window, polyorder)
+    return [None if ys[i] is None else float(smoothed[i]) for i in range(len(ys))]
+
+
 def _detect_foot_strikes(pose_frames):
     left_ys = []
     right_ys = []
@@ -86,6 +124,9 @@ def _detect_foot_strikes(pose_frames):
             continue
         left_ys.append(lm[LEFT_ANKLE]["y"])
         right_ys.append(lm[RIGHT_ANKLE]["y"])
+
+    left_ys = _savgol_or_passthrough(left_ys)
+    right_ys = _savgol_or_passthrough(right_ys)
 
     def local_min_indices(ys, radius=3):
         out = []
@@ -102,14 +143,25 @@ def _detect_foot_strikes(pose_frames):
 
 
 def _build_strides(pose_frames, strikes_left, strikes_right, scale, fps, height_cm):
+    ts_lookup = {p["frame_idx"]: p["timestamp_ms"] for p in pose_frames if p.get("timestamp_ms") is not None}
+
     strides = []
     for k in range(len(strikes_left) - 1):
         start_frame = strikes_left[k]
         end_frame = strikes_left[k + 1]
+
+        if start_frame in ts_lookup and end_frame in ts_lookup:
+            duration_sec = (ts_lookup[end_frame] - ts_lookup[start_frame]) / 1000.0
+        else:
+            duration_sec = (end_frame - start_frame) / fps if fps else 0
+
+        if not (_STRIDE_MIN_SEC <= duration_sec <= _STRIDE_MAX_SEC):
+            continue
+
         stride_frames = [p for p in pose_frames if start_frame <= p["frame_idx"] < end_frame]
         if not stride_frames:
             continue
-        d = _metrics_for_stride(stride_frames, start_frame, end_frame, scale, fps, height_cm)
+        d = _metrics_for_stride(stride_frames, start_frame, end_frame, scale, height_cm, duration_sec)
         d["stride_num"] = k + 1
         d["start_frame"] = start_frame
         d["end_frame"] = end_frame
@@ -117,8 +169,7 @@ def _build_strides(pose_frames, strikes_left, strikes_right, scale, fps, height_
     return strides
 
 
-def _metrics_for_stride(stride_frames, start_frame, end_frame, scale, fps, height_cm):
-    duration_sec = (end_frame - start_frame) / fps if fps else 0
+def _metrics_for_stride(stride_frames, start_frame, end_frame, scale, height_cm, duration_sec):
     steps_per_min = (2 * 60 / duration_sec) if duration_sec > 0 else 0
 
     hip_ys = []

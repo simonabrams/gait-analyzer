@@ -46,7 +46,7 @@ def _ensure_model():
     return str(path)
 
 
-def extract_poses(frames, model_complexity=1, start_frame_idx=0):
+def extract_poses(frames, model_complexity=1, start_frame_idx=0, timestamps_ms=None):
     """
     Run MediaPipe Pose on each frame and return landmark data (Tasks API).
 
@@ -54,11 +54,14 @@ def extract_poses(frames, model_complexity=1, start_frame_idx=0):
         frames: List of BGR images (numpy arrays, HxWx3).
         model_complexity: Ignored; kept for API compatibility. Tasks API uses bundled model.
         start_frame_idx: Base index for frame_idx in output (for chunked processing).
+        timestamps_ms: Optional list of actual frame timestamps in milliseconds (from
+            cap.get(cv2.CAP_PROP_POS_MSEC)). If provided, used instead of assuming
+            constant FPS. Must match len(frames).
 
     Returns:
-        List of dicts, one per frame: {"frame_idx": int, "landmarks": list of
-        {"x": float, "y": float, "z": float}} in normalized coords [0,1].
-        Frames where no pose is detected have "landmarks": None.
+        List of dicts, one per frame: {"frame_idx": int, "timestamp_ms": float,
+        "landmarks": list of {"x": float, "y": float, "z": float, "visibility": float}}
+        in normalized coords [0,1]. Frames where no pose is detected have "landmarks": None.
     """
     import cv2
     import mediapipe as mp
@@ -81,18 +84,23 @@ def extract_poses(frames, model_complexity=1, start_frame_idx=0):
     out = []
     for i, frame in enumerate(frames):
         idx = start_frame_idx + i
+        ts_ms = float(timestamps_ms[i]) if timestamps_ms is not None and i < len(timestamps_ms) else float(i * 33)
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        ts_ms = i * 33
-        result = landmarker.detect_for_video(mp_img, ts_ms)
+        result = landmarker.detect_for_video(mp_img, int(ts_ms))
         if not result.pose_landmarks:
-            out.append({"frame_idx": idx, "landmarks": None})
+            out.append({"frame_idx": idx, "timestamp_ms": ts_ms, "landmarks": None})
             continue
         pose_lms = result.pose_landmarks[0]
         landmarks = [
-            {"x": getattr(lm, "x", 0.0) or 0.0, "y": getattr(lm, "y", 0.0) or 0.0, "z": getattr(lm, "z", 0.0) or 0.0}
+            {
+                "x": getattr(lm, "x", 0.0) or 0.0,
+                "y": getattr(lm, "y", 0.0) or 0.0,
+                "z": getattr(lm, "z", 0.0) or 0.0,
+                "visibility": getattr(lm, "visibility", 0.0) or 0.0,
+            }
             for lm in pose_lms
         ]
-        out.append({"frame_idx": idx, "landmarks": landmarks})
+        out.append({"frame_idx": idx, "timestamp_ms": ts_ms, "landmarks": landmarks})
     landmarker.close()
     return out
