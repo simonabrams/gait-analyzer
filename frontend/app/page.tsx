@@ -13,7 +13,7 @@ export default function HomePage() {
 
   useEffect(() => {
     listRuns()
-      .then((r) => setHasRuns(r.length > 0))
+      .then((r) => setHasRuns(r.total > 0))
       .catch(() => setHasRuns(false));
   }, []);
 

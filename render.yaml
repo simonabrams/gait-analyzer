@@ -59,7 +59,7 @@ services:
     dockerfilePath: backend/Dockerfile
     dockerContext: .
     plan: free
-    startCommand: "celery -A backend.worker worker -l info -c 1"
+    dockerCommand: "celery -A backend.worker worker -l info -c 1"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
