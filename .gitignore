@@ -6,6 +6,7 @@
 .env
 .env.local
 frontend/.env.local
+frontend/.env.production
 
 # Python
 .venv/
