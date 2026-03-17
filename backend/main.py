@@ -44,17 +44,18 @@ app = FastAPI(title="Runlens.io API")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-_upload_token = os.environ.get("UPLOAD_TOKEN", "").strip()
-if not _upload_token:
+# If set, all API endpoints require X-Api-Key: <token>.
+# Leave unset to disable the check (e.g. local dev without a token).
+UPLOAD_TOKEN = os.environ.get("UPLOAD_TOKEN", "").strip()
+if not UPLOAD_TOKEN:
     logger.warning("UPLOAD_TOKEN is not set — API endpoints are unauthenticated")
 
 
-def verify_token(x_upload_token: str = Header(default="")) -> None:
-    """Require X-Upload-Token header when UPLOAD_TOKEN env var is configured."""
-    if not _upload_token:
+def _require_api_key(x_api_key: str = Header(default="")) -> None:
+    if not UPLOAD_TOKEN:
         return
-    if not secrets.compare_digest(x_upload_token, _upload_token):
-        raise HTTPException(status_code=401, detail="Invalid or missing upload token")
+    if not secrets.compare_digest(x_api_key, UPLOAD_TOKEN):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 _default_origins = "http://localhost:3000,http://127.0.0.1:3000,https://www.runlens.io,https://runlens.io"
 _raw = (os.environ.get("CORS_ORIGINS") or "").strip()
@@ -112,13 +113,13 @@ def serve_local_artifact(run_id: str, filename: str):
 
 
 @app.post("/api/runs", response_model=RunCreatedResponse)
-@limiter.limit("5/hour")
+@limiter.limit("10/hour")
 async def create_run(
     request: Request,
     file: UploadFile = File(...),
     height_cm: int = Form(..., ge=100, le=250),
     db: Session = Depends(get_db),
-    _: None = Depends(verify_token),
+    _: None = Depends(_require_api_key),
 ):
     suffix = (file.filename or "").split(".")[-1].lower()
     if suffix not in ALLOWED_EXTENSIONS:
@@ -179,7 +180,7 @@ async def create_run(
 
 
 @app.get("/api/runs/{run_id}/status", response_model=RunStatusResponse)
-def get_run_status(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = Depends(verify_token)):
+def get_run_status(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = Depends(_require_api_key)):
     run = _get_run(db, run_id)
     if not run:
         raise HTTPException(404, "Run not found")
@@ -194,7 +195,7 @@ def get_run_status(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = D
 
 
 @app.get("/api/runs/{run_id}", response_model=RunDetail)
-def get_run(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = Depends(verify_token)):
+def get_run(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = Depends(_require_api_key)):
     run = _get_run(db, run_id)
     if not run:
         raise HTTPException(404, "Run not found")
@@ -220,7 +221,7 @@ def list_runs(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    _: None = Depends(verify_token),
+    _: None = Depends(_require_api_key),
 ):
     total: int = db.query(func.count(Run.id)).scalar()
     runs = (
@@ -249,7 +250,7 @@ def list_runs(
 
 
 @app.delete("/api/runs/{run_id}", status_code=204)
-def delete_run(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = Depends(verify_token)):
+def delete_run(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = Depends(_require_api_key)):
     run = _get_run(db, run_id)
     if not run:
         raise HTTPException(404, "Run not found")
