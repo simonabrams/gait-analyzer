@@ -23,7 +23,7 @@ services:
           name: gait-db
           property: connectionString
       - key: REDIS_URL
-        generateValue: true
+        sync: false
       - key: CORS_ORIGINS
         sync: false
       - key: R2_ACCOUNT_ID
