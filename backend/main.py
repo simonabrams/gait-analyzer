@@ -6,16 +6,16 @@ import os
 import secrets
 import tempfile
 import uuid
-from typing import List
 
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend import storage
@@ -25,6 +25,7 @@ from backend.schemas import (
     RunCreatedResponse,
     RunDetail,
     RunListItem,
+    RunListResponse,
     RunStatusResponse,
 )
 from backend.storage import (
@@ -122,6 +123,11 @@ async def create_run(
     suffix = (file.filename or "").split(".")[-1].lower()
     if suffix not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, "Only MP4 and MOV files are allowed")
+    # Validate magic bytes: all MP4/MOV containers have 'ftyp' at bytes 4–7
+    header = await file.read(12)
+    if header[4:8] != b"ftyp":
+        raise HTTPException(400, "Invalid file: not a valid MP4 or MOV container")
+    await file.seek(0)
     content = await file.read(MAX_FILE_SIZE + 1)
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(400, "File too large")
@@ -209,14 +215,26 @@ def get_run(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = Depends(
     return detail
 
 
-@app.get("/api/runs", response_model=List[RunListItem])
-def list_runs(db: Session = Depends(get_db), _: None = Depends(verify_token)):
-    runs = db.query(Run).order_by(Run.created_at.desc()).all()
-    out = []
+@app.get("/api/runs", response_model=RunListResponse)
+def list_runs(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_token),
+):
+    total: int = db.query(func.count(Run.id)).scalar()
+    runs = (
+        db.query(Run)
+        .order_by(Run.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+        .all()
+    )
+    items = []
     for r in runs:
         summary = (r.results_json or {}).get("summary") or {}
         flags = (r.results_json or {}).get("flags") or []
-        out.append(
+        items.append(
             RunListItem(
                 run_id=r.id,
                 created_at=r.created_at,
@@ -227,7 +245,7 @@ def list_runs(db: Session = Depends(get_db), _: None = Depends(verify_token)):
                 flags_count=len(flags),
             )
         )
-    return out
+    return RunListResponse(total=total, items=items)
 
 
 @app.delete("/api/runs/{run_id}", status_code=204)

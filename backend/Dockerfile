@@ -15,6 +15,5 @@ USER appuser
 
 ENV PYTHONPATH=/app
 
-# Migrate, start Celery worker in background, then API (single container for plans without separate worker).
-# -c 1 keeps memory under 512MB when API and worker share the same container.
-CMD ["sh", "-c", "(cd backend && alembic upgrade head) && celery -A backend.worker worker -l info -c 1 & exec uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
+# Run migrations then start the API. Celery worker runs as a separate Render service (see render.yaml).
+CMD ["sh", "-c", "(cd backend && alembic upgrade head) && exec uvicorn backend.main:app --host 0.0.0.0 --port 8000"]

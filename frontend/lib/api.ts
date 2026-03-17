@@ -37,6 +37,11 @@ export interface RunListItem {
   flags_count: number;
 }
 
+export interface RunListResponse {
+  total: number;
+  items: RunListItem[];
+}
+
 export interface RunDetail {
   run_id: string;
   created_at: string;
@@ -98,8 +103,15 @@ export async function getRun(id: string): Promise<RunDetail> {
   return fetchApi<RunDetail>(`/api/runs/${id}`, { cache: "no-store" }, true);
 }
 
-export async function listRuns(): Promise<RunListItem[]> {
-  return fetchApi<RunListItem[]>("/api/runs", undefined, true);
+export async function listRuns(params?: {
+  limit?: number;
+  offset?: number;
+}): Promise<RunListResponse> {
+  const qs = new URLSearchParams();
+  if (params?.limit !== undefined) qs.set("limit", String(params.limit));
+  if (params?.offset !== undefined) qs.set("offset", String(params.offset));
+  const query = qs.toString() ? `?${qs}` : "";
+  return fetchApi<RunListResponse>(`/api/runs${query}`, undefined, true);
 }
 
 export async function deleteRun(id: string): Promise<boolean> {
