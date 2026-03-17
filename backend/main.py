@@ -3,18 +3,19 @@ FastAPI app: runs API, health, CORS.
 """
 import logging
 import os
+import secrets
 import tempfile
 import uuid
-from typing import List
 
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend import storage
@@ -24,6 +25,7 @@ from backend.schemas import (
     RunCreatedResponse,
     RunDetail,
     RunListItem,
+    RunListResponse,
     RunStatusResponse,
 )
 from backend.storage import (
@@ -37,17 +39,22 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(title="Runlens.io API")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# If set, POST /api/runs and DELETE /api/runs/{id} require X-Api-Key: <token>.
+# If set, all API endpoints require X-Api-Key: <token>.
 # Leave unset to disable the check (e.g. local dev without a token).
 UPLOAD_TOKEN = os.environ.get("UPLOAD_TOKEN", "").strip()
+if not UPLOAD_TOKEN:
+    logger.warning("UPLOAD_TOKEN is not set — API endpoints are unauthenticated")
 
 
 def _require_api_key(x_api_key: str = Header(default="")) -> None:
-    if UPLOAD_TOKEN and x_api_key != UPLOAD_TOKEN:
+    if not UPLOAD_TOKEN:
+        return
+    if not secrets.compare_digest(x_api_key, UPLOAD_TOKEN):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 _default_origins = "http://localhost:3000,http://127.0.0.1:3000,https://www.runlens.io,https://runlens.io"
@@ -117,6 +124,11 @@ async def create_run(
     suffix = (file.filename or "").split(".")[-1].lower()
     if suffix not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, "Only MP4 and MOV files are allowed")
+    # Validate magic bytes: all MP4/MOV containers have 'ftyp' at bytes 4–7
+    header = await file.read(12)
+    if header[4:8] != b"ftyp":
+        raise HTTPException(400, "Invalid file: not a valid MP4 or MOV container")
+    await file.seek(0)
     content = await file.read(MAX_FILE_SIZE + 1)
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(400, "File too large")
@@ -168,7 +180,7 @@ async def create_run(
 
 
 @app.get("/api/runs/{run_id}/status", response_model=RunStatusResponse)
-def get_run_status(run_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_run_status(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = Depends(_require_api_key)):
     run = _get_run(db, run_id)
     if not run:
         raise HTTPException(404, "Run not found")
@@ -183,7 +195,7 @@ def get_run_status(run_id: uuid.UUID, db: Session = Depends(get_db)):
 
 
 @app.get("/api/runs/{run_id}", response_model=RunDetail)
-def get_run(run_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_run(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = Depends(_require_api_key)):
     run = _get_run(db, run_id)
     if not run:
         raise HTTPException(404, "Run not found")
@@ -204,14 +216,26 @@ def get_run(run_id: uuid.UUID, db: Session = Depends(get_db)):
     return detail
 
 
-@app.get("/api/runs", response_model=List[RunListItem])
-def list_runs(db: Session = Depends(get_db)):
-    runs = db.query(Run).order_by(Run.created_at.desc()).all()
-    out = []
+@app.get("/api/runs", response_model=RunListResponse)
+def list_runs(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    _: None = Depends(_require_api_key),
+):
+    total: int = db.query(func.count(Run.id)).scalar()
+    runs = (
+        db.query(Run)
+        .order_by(Run.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+        .all()
+    )
+    items = []
     for r in runs:
         summary = (r.results_json or {}).get("summary") or {}
         flags = (r.results_json or {}).get("flags") or []
-        out.append(
+        items.append(
             RunListItem(
                 run_id=r.id,
                 created_at=r.created_at,
@@ -222,7 +246,7 @@ def list_runs(db: Session = Depends(get_db)):
                 flags_count=len(flags),
             )
         )
-    return out
+    return RunListResponse(total=total, items=items)
 
 
 @app.delete("/api/runs/{run_id}", status_code=204)
