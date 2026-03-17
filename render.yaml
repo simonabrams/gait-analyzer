@@ -56,7 +56,7 @@ services:
     runtime: docker
     dockerfilePath: backend/Dockerfile
     dockerContext: .
-    plan: free
+    plan: starter
     dockerCommand: "celery -A backend.worker worker -l info -c 1"
     envVars:
       - key: DATABASE_URL
