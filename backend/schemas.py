@@ -2,7 +2,7 @@
 Pydantic request/response schemas.
 """
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -28,6 +28,11 @@ class RunListItem(BaseModel):
     vertical_osc_avg_cm: Optional[float] = None
     knee_angle_strike_avg_deg: Optional[float] = None
     flags_count: int = 0
+
+
+class RunListResponse(BaseModel):
+    total: int
+    items: List[RunListItem]
 
 
 class RunCreatedResponse(BaseModel):

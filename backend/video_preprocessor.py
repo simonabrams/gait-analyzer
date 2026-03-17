@@ -6,7 +6,7 @@ VIDEO_MAX_HEIGHT=480 via env without redeploying.
 import logging
 import os
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime
 
 import cv2
 

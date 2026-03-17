@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { listRuns, deleteRun, type RunListItem } from "@/lib/api";
+import { listRuns, deleteRun, type RunListItem, type RunListResponse } from "@/lib/api";
+
+const PAGE_SIZE = 50;
 import ProgressCharts from "@/components/ProgressCharts";
 
 function formatDate(created_at: string) {
@@ -22,22 +24,29 @@ function TrashIcon({ className }: { className?: string }) {
 
 export default function RunsPage() {
   const [runs, setRuns] = useState<RunListItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [errorId, setErrorId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
-  const loadRuns = () => {
-    listRuns()
-      .then(setRuns)
-      .catch(() => setRuns([]))
+  const loadRuns = (pageIndex: number) => {
+    setLoading(true);
+    listRuns({ limit: PAGE_SIZE, offset: pageIndex * PAGE_SIZE })
+      .then((resp: RunListResponse) => {
+        setRuns(resp.items);
+        setTotal(resp.total);
+      })
+      .catch(() => { setRuns([]); setTotal(0); })
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    loadRuns();
-  }, []);
+    loadRuns(page);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   const handleDelete = async (runId: string) => {
     setConfirmingId(null);
@@ -49,6 +58,7 @@ export default function RunsPage() {
       setRemovingId(runId);
       setTimeout(() => {
         setRuns((prev) => prev.filter((r) => r.run_id !== runId));
+        setTotal((t) => t - 1);
         setRemovingId(null);
       }, 300);
     } else {
@@ -60,7 +70,7 @@ export default function RunsPage() {
     return <p className="text-gray-400">Loading run history...</p>;
   }
 
-  if (runs.length === 0) {
+  if (!loading && total === 0) {
     return (
       <div className="space-y-8">
         <div>
@@ -168,6 +178,31 @@ export default function RunsPage() {
               ))}
             </tbody>
           </table>
+          {total > PAGE_SIZE && (
+            <div className="flex items-center justify-between px-3 py-2 border-t border-white/10 text-sm text-gray-400">
+              <span>
+                {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={page === 0}
+                  onClick={() => setPage((p) => p - 1)}
+                  className="px-3 py-1 rounded border border-white/10 disabled:opacity-40 hover:bg-white/5 transition-colors"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  disabled={(page + 1) * PAGE_SIZE >= total}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="px-3 py-1 rounded border border-white/10 disabled:opacity-40 hover:bg-white/5 transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

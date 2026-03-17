@@ -11,6 +11,8 @@ if (!API_BASE) {
   throw new Error("NEXT_PUBLIC_API_URL is not set. Set it in .env.local (dev) or Vercel env (production).");
 }
 
+const UPLOAD_TOKEN = (process.env.NEXT_PUBLIC_UPLOAD_TOKEN || "").trim();
+
 /** Replace with a real sample run ID when you have an analysis to showcase. */
 export const SAMPLE_RUN_ID = "ab242812-582f-4107-b41c-0011087cd667";
 
@@ -33,6 +35,11 @@ export interface RunListItem {
   vertical_osc_avg_cm: number | null;
   knee_angle_strike_avg_deg: number | null;
   flags_count: number;
+}
+
+export interface RunListResponse {
+  total: number;
+  items: RunListItem[];
 }
 
 export interface RunDetail {
@@ -69,6 +76,7 @@ async function fetchApi<T>(
     ...restOptions,
     ...(cache !== undefined && { cache }),
     headers: {
+      ...(UPLOAD_TOKEN && { "X-Api-Key": UPLOAD_TOKEN }),
       ...restOptions.headers,
     },
   });
@@ -95,8 +103,15 @@ export async function getRun(id: string): Promise<RunDetail> {
   return fetchApi<RunDetail>(`/api/runs/${id}`, { cache: "no-store" }, true);
 }
 
-export async function listRuns(): Promise<RunListItem[]> {
-  return fetchApi<RunListItem[]>("/api/runs", undefined, true);
+export async function listRuns(params?: {
+  limit?: number;
+  offset?: number;
+}): Promise<RunListResponse> {
+  const qs = new URLSearchParams();
+  if (params?.limit !== undefined) qs.set("limit", String(params.limit));
+  if (params?.offset !== undefined) qs.set("offset", String(params.offset));
+  const query = qs.toString() ? `?${qs}` : "";
+  return fetchApi<RunListResponse>(`/api/runs${query}`, undefined, true);
 }
 
 export async function deleteRun(id: string): Promise<boolean> {

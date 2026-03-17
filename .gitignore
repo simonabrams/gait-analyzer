@@ -6,6 +6,8 @@
 .env
 .env.local
 frontend/.env.local
+frontend/.env.production
+frontend/.env.production.local
 
 # Python
 .venv/
@@ -20,3 +22,6 @@ frontend/.next/
 # IDE
 .idea/
 .vscode/
+
+# Claude Code
+.claude/settings.local.json

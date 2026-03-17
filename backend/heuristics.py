@@ -7,6 +7,28 @@ CADENCE_MIN_SPM = 170
 VERTICAL_OSC_MAX_CM = 10
 KNEE_FLEXION_MIN_DEG = 15
 TRUNK_LEAN_MAX_DEG = 15
+CADENCE_CONFIDENCE_LOW_THRESHOLD = 0.5
+
+
+def cadence_confidence(fps, ankle_visibility_scores, stride_count):
+    """
+    Return a 0–1 confidence score for the cadence measurement.
+
+    Args:
+        fps: Frames per second of the video.
+        ankle_visibility_scores: Iterable of per-frame ankle landmark visibility
+            values (0–1). May contain None entries which are ignored.
+        stride_count: Number of detected strides.
+
+    Returns:
+        Float in [0, 1]. Values below CADENCE_CONFIDENCE_LOW_THRESHOLD indicate
+        unreliable cadence estimates.
+    """
+    fps_score = min(fps / 60.0, 1.0) if fps and fps > 0 else 0.0
+    vis_values = [v for v in ankle_visibility_scores if v is not None]
+    vis_score = sum(vis_values) / len(vis_values) if vis_values else 0.0
+    stride_score = min(stride_count / 5.0, 1.0) if stride_count else 0.0
+    return round((fps_score + vis_score + stride_score) / 3.0, 3)
 
 
 def evaluate_heuristics(results):
@@ -19,6 +41,7 @@ def evaluate_heuristics(results):
     _check_knee_flexion(strides, flags)
     _check_overstriding(summary, strides, flags)
     _check_trunk_lean(summary, strides, flags)
+    _check_cadence_confidence(summary, flags)
 
     return flags
 
@@ -102,5 +125,20 @@ def _check_trunk_lean(summary, strides, flags):
             "recommendation": (
                 f"Forward trunk lean is {avg:.1f}°. "
                 "A more upright posture can reduce lower back load."
+            ),
+        })
+
+
+def _check_cadence_confidence(summary, flags):
+    conf = summary.get("cadence_confidence")
+    if conf is not None and conf < CADENCE_CONFIDENCE_LOW_THRESHOLD:
+        flags.append({
+            "metric": "cadence_confidence",
+            "value": conf,
+            "threshold": CADENCE_CONFIDENCE_LOW_THRESHOLD,
+            "recommendation": (
+                f"Cadence measurement confidence is low ({conf:.2f}). "
+                "Results may be unreliable. Consider using a higher frame rate "
+                "camera or ensuring ankles are clearly visible throughout the run."
             ),
         })

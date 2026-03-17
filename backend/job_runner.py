@@ -83,10 +83,12 @@ def run_analysis(
         report(10, "Extracting poses...")
         while True:
             chunk = []
+            chunk_timestamps = []
             for _ in range(CHUNK_SIZE):
                 if max_frames and max_frames > 0 and frames_used >= max_frames:
                     truncated = True
                     break
+                ts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
                 ret, frame = cap.read()
                 if not ret:
                     break
@@ -94,11 +96,12 @@ def run_analysis(
                 if out_w is None:
                     out_h, out_w = frame.shape[0], frame.shape[1]
                 chunk.append(frame)
+                chunk_timestamps.append(ts_ms)
                 frames_used += 1
             if not chunk:
                 break
             start_idx = frames_used - len(chunk)
-            part = extract_poses(chunk, start_frame_idx=start_idx)
+            part = extract_poses(chunk, start_frame_idx=start_idx, timestamps_ms=chunk_timestamps)
             pose_frames.extend(part)
             del chunk
 
