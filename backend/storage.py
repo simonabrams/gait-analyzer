@@ -13,7 +13,7 @@ from botocore.config import Config
 R2_ACCOUNT_ID = os.environ.get("R2_ACCOUNT_ID", "")
 R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "")
 R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "")
-R2_BUCKET_NAME = os.environ.get("R2_BUCKET_NAME", "gait-analyzer")
+R2_BUCKET_NAME = os.environ.get("R2_BUCKET_NAME", "runlens")
 # On Render the filesystem is ephemeral; require R2 and do not use local storage by default.
 _LOCAL_DEFAULT = "" if os.environ.get("RENDER") == "true" else ".local_storage"
 LOCAL_STORAGE_PATH = os.environ.get("LOCAL_STORAGE_PATH", _LOCAL_DEFAULT)
