@@ -10,10 +10,14 @@ WORKDIR /app
 COPY backend/ backend/
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
+RUN mkdir -p /tmp/matplotlib /tmp/fontconfig
+
 RUN useradd --no-create-home --shell /bin/false appuser && chown -R appuser /app
 USER appuser
 
 ENV PYTHONPATH=/app
+ENV MPLCONFIGDIR=/tmp/matplotlib
+ENV FC_CACHEDIR=/tmp/fontconfig
 
 # Run migrations then start the API. Celery worker runs as a separate Render service (see render.yaml).
 CMD ["sh", "-c", "(cd backend && alembic upgrade head) && exec uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
