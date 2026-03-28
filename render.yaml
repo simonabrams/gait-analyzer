@@ -81,3 +81,7 @@ services:
         sync: false
       - key: GAIT_MAX_WIDTH
         sync: false
+      # Subsample video to this many frames per second before pose extraction (e.g. 10).
+      # Reduces memory and CPU significantly; 8-10 fps is sufficient for gait analysis.
+      - key: GAIT_TARGET_FPS
+        sync: false

@@ -60,6 +60,7 @@ def run_analysis(
     progress_callback=None,
     max_frames=None,
     max_width=None,
+    target_fps=None,
 ):
     video_path = Path(video_path)
     temp_paths = []
@@ -76,6 +77,7 @@ def run_analysis(
         if not cap.isOpened():
             raise RuntimeError(f"Could not open video: {video_path}")
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        frame_skip = max(1, round(fps / target_fps)) if target_fps and target_fps > 0 else 1
         pose_frames = []
         frames_used = 0
         out_h = out_w = None
@@ -87,6 +89,14 @@ def run_analysis(
             for _ in range(CHUNK_SIZE):
                 if max_frames and max_frames > 0 and frames_used >= max_frames:
                     truncated = True
+                    break
+                # Discard frame_skip-1 frames before keeping one
+                exhausted = False
+                for _ in range(frame_skip - 1):
+                    if not cap.read()[0]:
+                        exhausted = True
+                        break
+                if exhausted:
                     break
                 ts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
                 ret, frame = cap.read()
@@ -134,6 +144,9 @@ def run_analysis(
         )
         cap2 = cv2.VideoCapture(str(video_path))
         for i in range(frames_used):
+            # Mirror the extraction skip so we read the same frames that were analysed
+            for _ in range(frame_skip - 1):
+                cap2.read()
             ret, frame = cap2.read()
             if not ret:
                 break

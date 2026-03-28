@@ -92,11 +92,14 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
 
         max_frames = None
         max_width = None
+        target_fps = None
         try:
             nf = int(os.environ.get("GAIT_MAX_FRAMES", "0"))
             nw = int(os.environ.get("GAIT_MAX_WIDTH", "0"))
+            tf = float(os.environ.get("GAIT_TARGET_FPS", "0"))
             max_frames = nf if nf > 0 else None
             max_width = nw if nw > 0 else None
+            target_fps = tf if tf > 0 else None
         except ValueError:
             pass
 
@@ -106,6 +109,7 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
             progress_callback=on_progress,
             max_frames=max_frames,
             max_width=max_width,
+            target_fps=target_fps,
         )
 
         ann_key = annotated_video_key(run_id)
