@@ -1,17 +1,11 @@
-// ACTION REQUIRED: Add your Vercel deployment URL to the CORS allowed origins
-// in backend/main.py after first deploy.
-// Format: https://runlens.vercel.app or your custom domain.
-
 // Video uploads go from the browser directly to the Render backend (createRun uses
-// API_BASE below). They never go through a Next.js API route, so Vercel’s 4.5MB
+// API_BASE below). They never go through a Next.js API route, so Vercel's 4.5MB
 // payload limit does not apply. Keep uploads pointing at the backend URL only.
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
 if (!API_BASE) {
   throw new Error("NEXT_PUBLIC_API_URL is not set. Set it in .env.local (dev) or Vercel env (production).");
 }
-
-const UPLOAD_TOKEN = (process.env.NEXT_PUBLIC_UPLOAD_TOKEN || "").trim();
 
 /** Replace with a real sample run ID when you have an analysis to showcase. */
 export const SAMPLE_RUN_ID = "ab242812-582f-4107-b41c-0011087cd667";
@@ -59,24 +53,18 @@ export interface RunDetail {
   error_message: string | null;
 }
 
-function apiUrl(path: string, directToBackend: boolean): string {
-  if (directToBackend) return `${API_BASE}${path}`;
-  if (typeof window !== "undefined") return path;
-  return `${API_BASE}${path}`;
-}
-
 async function fetchApi<T>(
   path: string,
   options?: RequestInit & { cache?: RequestCache },
-  directToBackend = false
+  token?: string,
 ): Promise<T> {
-  const url = apiUrl(path, directToBackend);
+  const url = `${API_BASE}${path}`;
   const { cache, ...restOptions } = options ?? {};
   const res = await fetch(url, {
     ...restOptions,
     ...(cache !== undefined && { cache }),
     headers: {
-      ...(UPLOAD_TOKEN && { "X-Api-Key": UPLOAD_TOKEN }),
+      ...(token && { Authorization: `Bearer ${token}` }),
       ...restOptions.headers,
     },
   });
@@ -88,35 +76,37 @@ async function fetchApi<T>(
   return res.json() as Promise<T>;
 }
 
-export async function createRun(formData: FormData): Promise<RunCreated> {
-  return fetchApi<RunCreated>("/api/runs", {
-    method: "POST",
-    body: formData,
-  }, true);
+/** Create a run. Requires a valid Clerk Bearer token. */
+export async function createRun(formData: FormData, token: string): Promise<RunCreated> {
+  return fetchApi<RunCreated>("/api/runs", { method: "POST", body: formData }, token);
 }
 
+/** Poll run status. Public — no auth required. */
 export async function getRunStatus(id: string): Promise<RunStatus> {
-  return fetchApi<RunStatus>(`/api/runs/${id}/status`, undefined, true);
+  return fetchApi<RunStatus>(`/api/runs/${id}/status`);
 }
 
+/** Get full run detail. Public — anyone with the UUID can view (enables sharing). */
 export async function getRun(id: string): Promise<RunDetail> {
-  return fetchApi<RunDetail>(`/api/runs/${id}`, { cache: "no-store" }, true);
+  return fetchApi<RunDetail>(`/api/runs/${id}`, { cache: "no-store" });
 }
 
-export async function listRuns(params?: {
-  limit?: number;
-  offset?: number;
-}): Promise<RunListResponse> {
+/** List runs for the authenticated user. Requires a valid Clerk Bearer token. */
+export async function listRuns(
+  params?: { limit?: number; offset?: number },
+  token?: string,
+): Promise<RunListResponse> {
   const qs = new URLSearchParams();
   if (params?.limit !== undefined) qs.set("limit", String(params.limit));
   if (params?.offset !== undefined) qs.set("offset", String(params.offset));
   const query = qs.toString() ? `?${qs}` : "";
-  return fetchApi<RunListResponse>(`/api/runs${query}`, undefined, true);
+  return fetchApi<RunListResponse>(`/api/runs${query}`, undefined, token);
 }
 
-export async function deleteRun(id: string): Promise<boolean> {
+/** Delete a run. Requires a valid Clerk Bearer token and ownership. */
+export async function deleteRun(id: string, token: string): Promise<boolean> {
   try {
-    await fetchApi<void>(`/api/runs/${id}`, { method: "DELETE" }, true);
+    await fetchApi<void>(`/api/runs/${id}`, { method: "DELETE" }, token);
     return true;
   } catch {
     return false;

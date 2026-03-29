@@ -4,7 +4,7 @@ SQLAlchemy ORM models for gait analyzer.
 import enum
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, Enum, Integer, String, Text
+from sqlalchemy import Column, DateTime, Enum, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import declarative_base
 
@@ -32,3 +32,9 @@ class Run(Base):
     error_message = Column(Text, nullable=True)
     preprocessing_meta = Column(JSONB, nullable=True)
     recorded_at = Column(DateTime(timezone=True), nullable=True)
+    # Clerk user ID (e.g. "user_2abc..."). Nullable for pre-auth legacy runs.
+    user_id = Column(String(255), nullable=True, index=True)
+
+    __table_args__ = (
+        Index("ix_runs_user_id_created_at", "user_id", "created_at"),
+    )

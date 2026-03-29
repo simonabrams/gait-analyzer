@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SignInButton, UserButton, useAuth } from "@clerk/nextjs";
 
 function ApertureIcon({ className }: { className?: string }) {
   return (
@@ -27,6 +28,7 @@ export default function Nav() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const { isSignedIn } = useAuth();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
@@ -69,6 +71,18 @@ export default function Nav() {
         <div className="hidden md:flex items-center gap-8">
           {link("/runs", "Runs")}
           {link("/about", "About")}
+          {isSignedIn ? (
+            <UserButton />
+          ) : (
+            <SignInButton mode="modal">
+              <button
+                type="button"
+                className="bg-primary text-background font-medium px-4 py-2 rounded-lg hover:opacity-90 transition-opacity"
+              >
+                Sign in
+              </button>
+            </SignInButton>
+          )}
           <Link
             href="/#upload"
             className="bg-primary text-background font-medium px-4 py-2 rounded-lg hover:opacity-90 transition-opacity"
@@ -98,6 +112,18 @@ export default function Nav() {
         <div className="md:hidden bg-secondary border-t border-white/10 py-4 px-4 flex flex-col gap-4">
           {link("/runs", "Runs")}
           {link("/about", "About")}
+          {isSignedIn ? (
+            <UserButton />
+          ) : (
+            <SignInButton mode="modal">
+              <button
+                type="button"
+                className="text-gray-200 font-medium text-left"
+              >
+                Sign in
+              </button>
+            </SignInButton>
+          )}
           <Link
             href="/#upload"
             className="bg-primary text-background font-medium px-4 py-2 rounded-lg text-center w-fit"

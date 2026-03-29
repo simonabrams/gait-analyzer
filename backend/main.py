@@ -3,18 +3,19 @@ FastAPI app: runs API, health, CORS.
 """
 import logging
 import os
-import secrets
 import tempfile
 import uuid
 
 from pathlib import Path
 
+import jwt
 import redis as redis_lib
 import sentry_sdk
 from cachetools import TTLCache
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from jwt import PyJWKClient
 from pythonjsonlogger import jsonlogger
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -67,18 +68,47 @@ app = FastAPI(title="Runlens.io API")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# If set, all API endpoints require X-Api-Key: <token>.
-# Leave unset to disable the check (e.g. local dev without a token).
-UPLOAD_TOKEN = os.environ.get("UPLOAD_TOKEN", "").strip()
-if not UPLOAD_TOKEN:
-    logger.warning("UPLOAD_TOKEN is not set — API endpoints are unauthenticated")
+# ---------------------------------------------------------------------------
+# JWT auth — Clerk RS256 verification via JWKS
+# Set CLERK_JWKS_URL to your Clerk app's JWKS endpoint, e.g.:
+#   https://<your-clerk-domain>/.well-known/jwks.json
+# Leave unset to disable auth checks in local dev (all requests accepted).
+# ---------------------------------------------------------------------------
+CLERK_JWKS_URL = os.environ.get("CLERK_JWKS_URL", "").strip()
+_jwks_client: PyJWKClient | None = None
+if CLERK_JWKS_URL:
+    _jwks_client = PyJWKClient(CLERK_JWKS_URL, cache_keys=True)
+    logger.info("Clerk JWT auth enabled")
+else:
+    logger.warning("CLERK_JWKS_URL not set — JWT auth disabled (dev mode)")
+
+_DEV_USER = "dev-user"
 
 
-def _require_api_key(x_api_key: str = Header(default="")) -> None:
-    if not UPLOAD_TOKEN:
-        return
-    if not secrets.compare_digest(x_api_key, UPLOAD_TOKEN):
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+def _verify_jwt(authorization: str) -> str:
+    """Verify a Clerk Bearer JWT and return the Clerk user ID (sub claim).
+
+    Raises HTTPException(401) on any auth failure.
+    If CLERK_JWKS_URL is not configured (dev mode), returns _DEV_USER.
+    """
+    if not _jwks_client:
+        return _DEV_USER
+
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization: Bearer <token>")
+
+    token = authorization[7:]
+    try:
+        signing_key = _jwks_client.get_signing_key_from_jwt(token)
+        payload = jwt.decode(token, signing_key.key, algorithms=["RS256"])
+        return payload["sub"]
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+def get_current_user(authorization: str = Header(default="")) -> str:
+    return _verify_jwt(authorization)
+
 
 _default_origins = "http://localhost:3000,http://127.0.0.1:3000,https://www.runlens.io,https://runlens.io"
 _raw = (os.environ.get("CORS_ORIGINS") or "").strip()
@@ -169,6 +199,9 @@ def serve_local_artifact(run_id: str, filename: str):
     return FileResponse(path, media_type="video/mp4" if filename.endswith(".mp4") else "image/png")
 
 
+# ---------------------------------------------------------------------------
+# POST /api/runs — create a run (requires auth; run is owned by the caller)
+# ---------------------------------------------------------------------------
 @app.post("/api/runs", response_model=RunCreatedResponse)
 @limiter.limit("10/hour")
 async def create_run(
@@ -176,7 +209,7 @@ async def create_run(
     file: UploadFile = File(...),
     height_cm: int = Form(..., ge=100, le=250),
     db: Session = Depends(get_db),
-    _: None = Depends(_require_api_key),
+    user_id: str = Depends(get_current_user),
 ):
     suffix = (file.filename or "").split(".")[-1].lower()
     if suffix not in ALLOWED_EXTENSIONS:
@@ -223,6 +256,7 @@ async def create_run(
 
     run = Run(
         id=run_id,
+        user_id=user_id,
         height_cm=height_cm,
         status=RunStatus.processing,
         progress_pct=0,
@@ -244,17 +278,19 @@ async def create_run(
             503,
             "Job queue unavailable. Is Redis running?",
         ) from e
-    logger.info("Run created", extra={"run_id": str(run_id), "height_cm": height_cm})
+    logger.info("Run created", extra={"run_id": str(run_id), "height_cm": height_cm, "user_id": user_id})
     return RunCreatedResponse(run_id=run_id, status="processing")
 
 
+# ---------------------------------------------------------------------------
+# GET /api/runs/{run_id}/status — public (anyone with UUID can poll status)
+# ---------------------------------------------------------------------------
 @app.get("/api/runs/{run_id}/status", response_model=RunStatusResponse)
 @limiter.limit("120/minute")
 def get_run_status(
     request: Request,
     run_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: None = Depends(_require_api_key),
 ):
     run = _get_run(db, run_id)
     if not run:
@@ -269,13 +305,15 @@ def get_run_status(
     )
 
 
+# ---------------------------------------------------------------------------
+# GET /api/runs/{run_id} — public (anyone with UUID can view; enables sharing)
+# ---------------------------------------------------------------------------
 @app.get("/api/runs/{run_id}", response_model=RunDetail)
 @limiter.limit("60/minute")
 def get_run(
     request: Request,
     run_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: None = Depends(_require_api_key),
 ):
     run = _get_run(db, run_id)
     if not run:
@@ -297,6 +335,9 @@ def get_run(
     return detail
 
 
+# ---------------------------------------------------------------------------
+# GET /api/runs — list runs for the authenticated user only
+# ---------------------------------------------------------------------------
 @app.get("/api/runs", response_model=RunListResponse)
 @limiter.limit("60/minute")
 def list_runs(
@@ -304,16 +345,11 @@ def list_runs(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    _: None = Depends(_require_api_key),
+    user_id: str = Depends(get_current_user),
 ):
-    total: int = db.query(func.count(Run.id)).scalar()
-    runs = (
-        db.query(Run)
-        .order_by(Run.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-        .all()
-    )
+    q = db.query(Run).filter(Run.user_id == user_id)
+    total: int = q.with_entities(func.count(Run.id)).scalar()
+    runs = q.order_by(Run.created_at.desc()).limit(limit).offset(offset).all()
     items = []
     for r in runs:
         summary = (r.results_json or {}).get("summary") or {}
@@ -332,10 +368,20 @@ def list_runs(
     return RunListResponse(total=total, items=items)
 
 
+# ---------------------------------------------------------------------------
+# DELETE /api/runs/{run_id} — requires auth; only owner can delete
+# ---------------------------------------------------------------------------
 @app.delete("/api/runs/{run_id}", status_code=204)
-def delete_run(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = Depends(_require_api_key)):
+def delete_run(
+    run_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
     run = _get_run(db, run_id)
     if not run:
+        raise HTTPException(404, "Run not found")
+    # Return 404 (not 403) so we don't leak that the run exists
+    if run.user_id != user_id:
         raise HTTPException(404, "Run not found")
     try:
         for key in [run.raw_video_r2_key, run.annotated_video_r2_key, run.dashboard_image_r2_key]:
@@ -346,5 +392,5 @@ def delete_run(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = Depen
         logger.warning("R2/local delete failed for run %s: %s", run_id, e)
     db.delete(run)
     db.commit()
-    logger.info("Run deleted", extra={"run_id": str(run_id)})
+    logger.info("Run deleted", extra={"run_id": str(run_id), "user_id": user_id})
     return None

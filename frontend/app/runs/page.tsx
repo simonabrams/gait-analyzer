@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@clerk/nextjs";
 import { listRuns, deleteRun, type RunListItem, type RunListResponse } from "@/lib/api";
 
 const PAGE_SIZE = 50;
@@ -31,16 +32,24 @@ export default function RunsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [errorId, setErrorId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const { getToken } = useAuth();
 
-  const loadRuns = (pageIndex: number) => {
+  const loadRuns = async (pageIndex: number) => {
     setLoading(true);
-    listRuns({ limit: PAGE_SIZE, offset: pageIndex * PAGE_SIZE })
-      .then((resp: RunListResponse) => {
-        setRuns(resp.items);
-        setTotal(resp.total);
-      })
-      .catch(() => { setRuns([]); setTotal(0); })
-      .finally(() => setLoading(false));
+    try {
+      const token = await getToken();
+      const resp: RunListResponse = await listRuns(
+        { limit: PAGE_SIZE, offset: pageIndex * PAGE_SIZE },
+        token ?? undefined,
+      );
+      setRuns(resp.items);
+      setTotal(resp.total);
+    } catch {
+      setRuns([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -52,7 +61,8 @@ export default function RunsPage() {
     setConfirmingId(null);
     setErrorId(null);
     setDeletingId(runId);
-    const ok = await deleteRun(runId);
+    const token = await getToken();
+    const ok = await deleteRun(runId, token ?? "");
     setDeletingId(null);
     if (ok) {
       setRemovingId(runId);

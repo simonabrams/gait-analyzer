@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
+import { useAuth, SignInButton } from "@clerk/nextjs";
 import { createRun, getRunStatus } from "@/lib/api";
 
 const ALLOWED = { "video/mp4": [".mp4"], "video/quicktime": [".mov"] };
@@ -19,6 +20,7 @@ export default function VideoUploader({
   const [preprocessingWarning, setPreprocessingWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { isSignedIn, getToken } = useAuth();
 
   useEffect(() => {
     return () => {
@@ -46,10 +48,13 @@ export default function VideoUploader({
     setProgress(0);
     setStatus("Uploading...");
     try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+
       const form = new FormData();
       form.append("file", file);
       form.append("height_cm", String(height));
-      const { run_id } = await createRun(form);
+      const { run_id } = await createRun(form, token);
       setStatus("Processing...");
       // Exponential backoff: 2s → 4s → 8s (capped). Reduces poll requests from ~20 to ~8 per run.
       const poll = async (delay: number) => {
@@ -120,14 +125,25 @@ export default function VideoUploader({
         </div>
       )}
       {error && <p className="text-red-600 text-sm">{error}</p>}
-      <button
-        type="button"
-        onClick={submit}
-        disabled={!file || progress !== null}
-        className="px-4 py-2 bg-primary text-background font-medium rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-      >
-        Analyze
-      </button>
+      {isSignedIn ? (
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!file || progress !== null}
+          className="px-4 py-2 bg-primary text-background font-medium rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+        >
+          Analyze
+        </button>
+      ) : (
+        <SignInButton mode="modal">
+          <button
+            type="button"
+            className="px-4 py-2 bg-primary text-background font-medium rounded-lg hover:opacity-90 transition-opacity"
+          >
+            Sign in to Analyze
+          </button>
+        </SignInButton>
+      )}
     </div>
   );
 }
