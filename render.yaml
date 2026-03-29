@@ -47,6 +47,10 @@ services:
         sync: false
       - key: SENTRY_DSN
         sync: false
+      # Clerk JWKS endpoint for JWT verification. Find in Clerk dashboard → API Keys.
+      # Format: https://<your-clerk-domain>/.well-known/jwks.json
+      - key: CLERK_JWKS_URL
+        sync: false
       # Optional: set to reduce worker memory (e.g. GAIT_MAX_FRAMES=600, GAIT_MAX_WIDTH=960)
       - key: GAIT_MAX_FRAMES
         sync: false
