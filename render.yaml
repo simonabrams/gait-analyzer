@@ -19,7 +19,7 @@ services:
     runtime: docker
     dockerfilePath: backend/Dockerfile
     dockerContext: .
-    plan: free
+    plan: starter
     healthCheckPath: /api/health
     envVars:
       - key: DATABASE_URL
@@ -45,6 +45,8 @@ services:
       # also set NEXT_PUBLIC_UPLOAD_TOKEN to the same value in Vercel.
       - key: UPLOAD_TOKEN
         sync: false
+      - key: SENTRY_DSN
+        sync: false
       # Optional: set to reduce worker memory (e.g. GAIT_MAX_FRAMES=600, GAIT_MAX_WIDTH=960)
       - key: GAIT_MAX_FRAMES
         sync: false
@@ -56,8 +58,8 @@ services:
     runtime: docker
     dockerfilePath: backend/Dockerfile
     dockerContext: .
-    plan: starter
-    dockerCommand: "celery -A backend.worker worker -l info -c 1"
+    plan: standard
+    dockerCommand: "celery -A backend.worker worker -l info -c 1 --max-tasks-per-child 1"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -75,6 +77,8 @@ services:
       - key: R2_SECRET_ACCESS_KEY
         sync: false
       - key: R2_BUCKET_NAME
+        sync: false
+      - key: SENTRY_DSN
         sync: false
       # Optional: set to reduce worker memory (e.g. GAIT_MAX_FRAMES=600, GAIT_MAX_WIDTH=960)
       - key: GAIT_MAX_FRAMES

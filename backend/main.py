@@ -9,13 +9,17 @@ import uuid
 
 from pathlib import Path
 
+import redis as redis_lib
+import sentry_sdk
+from cachetools import TTLCache
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from pythonjsonlogger import jsonlogger
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from backend import storage
@@ -35,8 +39,27 @@ from backend.storage import (
     upload_file,
 )
 
-logging.basicConfig(level=logging.INFO)
+# ---------------------------------------------------------------------------
+# Logging — structured JSON in production, plain text in local dev
+# ---------------------------------------------------------------------------
+_log_handler = logging.StreamHandler()
+_log_handler.setFormatter(jsonlogger.JsonFormatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+logging.basicConfig(level=logging.INFO, handlers=[_log_handler])
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Sentry
+# ---------------------------------------------------------------------------
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
+if SENTRY_DSN:
+    sentry_sdk.init(dsn=SENTRY_DSN)
+    logger.info("Sentry initialised")
+
+# ---------------------------------------------------------------------------
+# Presigned URL cache — avoids an R2 round-trip on every page load.
+# TTL is 30 min; presigned URLs themselves are valid for 1 hour.
+# ---------------------------------------------------------------------------
+_presigned_cache: TTLCache = TTLCache(maxsize=512, ttl=1800)
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -88,14 +111,48 @@ def unhandled_exception_handler(request: Request, exc: Exception):
 
 ALLOWED_EXTENSIONS = {"mp4", "mov"}
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB
+_CHUNK = 65536  # 64 KB streaming chunks
 
 
 def _get_run(db: Session, run_id: uuid.UUID) -> Run | None:
     return db.query(Run).filter(Run.id == run_id).first()
 
 
+def _cached_presigned_url(r2_key: str) -> str:
+    """Return a presigned URL, served from an in-process TTL cache."""
+    if r2_key not in _presigned_cache:
+        _presigned_cache[r2_key] = generate_presigned_url(r2_key)
+    return _presigned_cache[r2_key]
+
+
+# ---------------------------------------------------------------------------
+# Health — verifies DB and Redis are reachable before returning 200
+# ---------------------------------------------------------------------------
 @app.get("/api/health")
-def health():
+def health(db: Session = Depends(get_db)):
+    failing = []
+
+    # Database check
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as exc:
+        logger.error("Health check: DB unreachable: %s", exc)
+        failing.append("database")
+
+    # Redis check
+    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+    try:
+        r = redis_lib.from_url(redis_url, socket_connect_timeout=2)
+        r.ping()
+    except Exception as exc:
+        logger.error("Health check: Redis unreachable: %s", exc)
+        failing.append("redis")
+
+    if failing:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "failing": failing},
+        )
     return {"status": "ok"}
 
 
@@ -124,22 +181,32 @@ async def create_run(
     suffix = (file.filename or "").split(".")[-1].lower()
     if suffix not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, "Only MP4 and MOV files are allowed")
+
     # Validate magic bytes: all MP4/MOV containers have 'ftyp' at bytes 4–7
     header = await file.read(12)
     if header[4:8] != b"ftyp":
         raise HTTPException(400, "Invalid file: not a valid MP4 or MOV container")
     await file.seek(0)
-    content = await file.read(MAX_FILE_SIZE + 1)
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(400, "File too large")
+
+    # Stream the upload to a temp file in 64 KB chunks instead of reading into RAM.
     run_id = uuid.uuid4()
     raw_key = raw_video_key(str(run_id))
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-            tmp.write(content)
             tmp_path = tmp.name
+            total_bytes = 0
+            while True:
+                chunk = await file.read(_CHUNK)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_FILE_SIZE:
+                    raise HTTPException(400, "File too large (max 500 MB)")
+                tmp.write(chunk)
         upload_file(tmp_path, raw_key)
+    except HTTPException:
+        raise
     except RuntimeError as e:
         if "R2" in str(e) or "LOCAL_STORAGE" in str(e):
             raise HTTPException(
@@ -153,6 +220,7 @@ async def create_run(
                 os.unlink(tmp_path)
             except OSError:
                 pass
+
     run = Run(
         id=run_id,
         height_cm=height_cm,
@@ -165,22 +233,29 @@ async def create_run(
         db.commit()
     except Exception as e:
         db.rollback()
-        logger.exception("DB commit failed: %s", e)
+        logger.exception("DB commit failed for run %s: %s", run_id, e)
         raise HTTPException(500, "Database error. Check server logs.") from e
     try:
         from backend.worker import process_video
         process_video.delay(str(run_id), raw_key, height_cm)
     except Exception as e:
-        logger.exception("Failed to enqueue job: %s", e)
+        logger.exception("Failed to enqueue job for run %s: %s", run_id, e)
         raise HTTPException(
             503,
             "Job queue unavailable. Is Redis running?",
         ) from e
+    logger.info("Run created", extra={"run_id": str(run_id), "height_cm": height_cm})
     return RunCreatedResponse(run_id=run_id, status="processing")
 
 
 @app.get("/api/runs/{run_id}/status", response_model=RunStatusResponse)
-def get_run_status(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = Depends(_require_api_key)):
+@limiter.limit("120/minute")
+def get_run_status(
+    request: Request,
+    run_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: None = Depends(_require_api_key),
+):
     run = _get_run(db, run_id)
     if not run:
         raise HTTPException(404, "Run not found")
@@ -195,7 +270,13 @@ def get_run_status(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = D
 
 
 @app.get("/api/runs/{run_id}", response_model=RunDetail)
-def get_run(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = Depends(_require_api_key)):
+@limiter.limit("60/minute")
+def get_run(
+    request: Request,
+    run_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: None = Depends(_require_api_key),
+):
     run = _get_run(db, run_id)
     if not run:
         raise HTTPException(404, "Run not found")
@@ -210,14 +291,16 @@ def get_run(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = Depends(
     )
     if run.status == RunStatus.complete and run.results_json:
         if run.annotated_video_r2_key:
-            detail.annotated_video_url = generate_presigned_url(run.annotated_video_r2_key)
+            detail.annotated_video_url = _cached_presigned_url(run.annotated_video_r2_key)
         if run.dashboard_image_r2_key:
-            detail.dashboard_image_url = generate_presigned_url(run.dashboard_image_r2_key)
+            detail.dashboard_image_url = _cached_presigned_url(run.dashboard_image_r2_key)
     return detail
 
 
 @app.get("/api/runs", response_model=RunListResponse)
+@limiter.limit("60/minute")
 def list_runs(
+    request: Request,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -258,8 +341,10 @@ def delete_run(run_id: uuid.UUID, db: Session = Depends(get_db), _: None = Depen
         for key in [run.raw_video_r2_key, run.annotated_video_r2_key, run.dashboard_image_r2_key]:
             if key:
                 delete_object(key)
+                _presigned_cache.pop(key, None)
     except Exception as e:
         logger.warning("R2/local delete failed for run %s: %s", run_id, e)
     db.delete(run)
     db.commit()
+    logger.info("Run deleted", extra={"run_id": str(run_id)})
     return None

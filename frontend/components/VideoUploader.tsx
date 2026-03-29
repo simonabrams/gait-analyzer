@@ -18,11 +18,11 @@ export default function VideoUploader({
   const [status, setStatus] = useState<string | null>(null);
   const [preprocessingWarning, setPreprocessingWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
     };
   }, []);
 
@@ -51,22 +51,23 @@ export default function VideoUploader({
       form.append("height_cm", String(height));
       const { run_id } = await createRun(form);
       setStatus("Processing...");
-      pollRef.current = setInterval(async () => {
+      // Exponential backoff: 2s → 4s → 8s (capped). Reduces poll requests from ~20 to ~8 per run.
+      const poll = async (delay: number) => {
         const s = await getRunStatus(run_id);
         setProgress(s.progress);
         setStatus(s.status === "processing" ? "Processing..." : s.status);
         if (s.preprocessing_warning) setPreprocessingWarning(s.preprocessing_warning);
         if (s.status === "complete") {
-          if (pollRef.current) clearInterval(pollRef.current);
-          pollRef.current = null;
           onComplete(run_id);
         } else if (s.status === "failed") {
-          if (pollRef.current) clearInterval(pollRef.current);
-          pollRef.current = null;
           setError("Analysis failed.");
           setProgress(null);
+        } else {
+          // Still processing — schedule next poll with backed-off delay (max 8s)
+          pollTimeoutRef.current = setTimeout(() => poll(Math.min(delay * 2, 8000)), delay);
         }
-      }, 3000);
+      };
+      pollTimeoutRef.current = setTimeout(() => poll(2000), 2000);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
       setProgress(null);
