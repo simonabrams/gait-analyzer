@@ -5,9 +5,9 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 // so share links and the sample run work without auth.
 const isProtectedRoute = createRouteMatcher(["/runs"]);
 
-export default clerkMiddleware(async (auth, req) => {
+export default clerkMiddleware((auth, req) => {
   if (isProtectedRoute(req)) {
-    await auth.protect();
+    auth().protect();
   }
 });
 
