@@ -15,7 +15,7 @@ export default function AboutPage() {
   const [techOpen, setTechOpen] = useState(false);
 
   return (
-    <div className="py-8 max-w-3xl mx-auto">
+    <div className="py-8 max-w-3xl mx-auto px-4">
       <section className="mb-12">
         <h1 className="text-3xl font-bold text-white mb-4">Built by a runner, for runners.</h1>
         <p className="text-gray-300 leading-relaxed">

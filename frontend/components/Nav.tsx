@@ -35,15 +35,16 @@ export default function Nav() {
   }, []);
 
   const navBg = scrolled
-    ? "bg-secondary border-b border-white/10"
+    ? "bg-black/90 backdrop-blur-sm border-b border-white/10"
     : "bg-transparent border-b border-transparent";
-  const link = (path: string, label: string) => {
+
+  const navLink = (path: string, label: string) => {
     const isActive = pathname === path;
     return (
       <Link
         href={path}
-        className={`font-medium transition-colors hover:text-primary ${
-          isActive ? "text-primary border-b-2 border-primary" : "text-gray-200"
+        className={`text-sm font-medium transition-colors hover:text-white ${
+          isActive ? "text-white" : "text-gray-300"
         }`}
         onClick={() => setMenuOpen(false)}
       >
@@ -56,27 +57,41 @@ export default function Nav() {
     <header
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${navBg}`}
     >
-      <nav className="container mx-auto px-4 flex items-center justify-between h-14 max-w-6xl">
+      <nav className="mx-auto px-6 flex items-center justify-between h-14 max-w-6xl">
+        {/* Logo */}
         <Link
           href="/"
-          className="flex items-center gap-2 text-gray-100 hover:text-white transition-colors"
+          className="flex items-center gap-2 text-white hover:opacity-90 transition-opacity"
           onClick={() => setMenuOpen(false)}
         >
-          <ApertureIcon className="w-7 h-7 text-primary shrink-0" />
-          <span className="font-medium text-lg">Runlens</span>
+          <ApertureIcon className="w-6 h-6 text-primary shrink-0" />
+          <span className="font-semibold text-base tracking-tight">Runlens</span>
         </Link>
 
-        <div className="hidden md:flex items-center gap-8">
-          {link("/runs", "Runs")}
-          {link("/about", "About")}
+        {/* Center nav links */}
+        <div className="hidden md:flex items-center gap-8 absolute left-1/2 -translate-x-1/2">
+          {navLink("/runs", "Runs")}
+          <span className="text-gray-600">|</span>
+          {navLink("/about", "About")}
+        </div>
+
+        {/* Right actions */}
+        <div className="hidden md:flex items-center gap-5">
+          <Link
+            href="/runs"
+            className="text-sm font-medium text-gray-300 hover:text-white transition-colors"
+          >
+            Sign in
+          </Link>
           <Link
             href="/#upload"
-            className="bg-primary text-background font-medium px-4 py-2 rounded-lg hover:opacity-90 transition-opacity"
+            className="bg-primary text-background text-sm font-semibold px-4 py-2 rounded-lg hover:opacity-90 transition-opacity"
           >
             Analyze a Run →
           </Link>
         </div>
 
+        {/* Mobile hamburger */}
         <button
           type="button"
           className="md:hidden p-2 text-gray-300 hover:text-white"
@@ -95,12 +110,19 @@ export default function Nav() {
       </nav>
 
       {menuOpen && (
-        <div className="md:hidden bg-secondary border-t border-white/10 py-4 px-4 flex flex-col gap-4">
-          {link("/runs", "Runs")}
-          {link("/about", "About")}
+        <div className="md:hidden bg-black/95 border-t border-white/10 py-4 px-6 flex flex-col gap-4">
+          {navLink("/runs", "Runs")}
+          {navLink("/about", "About")}
+          <Link
+            href="/runs"
+            className="text-sm font-medium text-gray-300 hover:text-white transition-colors"
+            onClick={() => setMenuOpen(false)}
+          >
+            Sign in
+          </Link>
           <Link
             href="/#upload"
-            className="bg-primary text-background font-medium px-4 py-2 rounded-lg text-center w-fit"
+            className="bg-primary text-background text-sm font-semibold px-4 py-2 rounded-lg text-center w-fit"
             onClick={() => setMenuOpen(false)}
           >
             Analyze a Run →

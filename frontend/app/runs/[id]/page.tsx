@@ -49,7 +49,7 @@ export default async function RunResultPage({ params }: Props) {
 
   if (run.status === "processing") {
     return (
-      <div className="space-y-4">
+      <div className="max-w-6xl mx-auto px-4 py-8 space-y-4">
         <h1 className="text-2xl font-bold">Analysis in progress</h1>
         <p className="text-gray-600">This run is still being processed. Refresh in a moment.</p>
         <Link href="/runs" className="text-blue-600 hover:underline">
@@ -61,7 +61,7 @@ export default async function RunResultPage({ params }: Props) {
 
   if (run.status === "failed") {
     return (
-      <div className="space-y-4">
+      <div className="max-w-6xl mx-auto px-4 py-8 space-y-4">
         <h1 className="text-2xl font-bold">Analysis failed</h1>
         <p className="text-red-600">{run.error_message ?? "Unknown error"}</p>
         <Link href="/runs" className="text-blue-600 hover:underline">
@@ -75,7 +75,7 @@ export default async function RunResultPage({ params }: Props) {
   const flags = run.results?.flags;
 
   return (
-    <div className="space-y-8">
+    <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-white">Run result</h1>
         <div className="flex items-center gap-2">
