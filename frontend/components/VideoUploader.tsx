@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
+import { useAuth, SignInButton } from "@clerk/nextjs";
 import { createRun, getRunStatus } from "@/lib/api";
 
 const ALLOWED = { "video/mp4": [".mp4"], "video/quicktime": [".mov"] };
@@ -18,11 +19,12 @@ export default function VideoUploader({
   const [status, setStatus] = useState<string | null>(null);
   const [preprocessingWarning, setPreprocessingWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { isSignedIn, getToken } = useAuth();
 
   useEffect(() => {
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
     };
   }, []);
 
@@ -46,27 +48,30 @@ export default function VideoUploader({
     setProgress(0);
     setStatus("Uploading...");
     try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+
       const form = new FormData();
       form.append("file", file);
       form.append("height_cm", String(height));
-      const { run_id } = await createRun(form);
+      const { run_id } = await createRun(form, token);
       setStatus("Processing...");
-      pollRef.current = setInterval(async () => {
+      // Exponential backoff: 2s → 4s → 8s (capped). Reduces poll requests from ~20 to ~8 per run.
+      const poll = async (delay: number) => {
         const s = await getRunStatus(run_id);
         setProgress(s.progress);
         setStatus(s.status === "processing" ? "Processing..." : s.status);
         if (s.preprocessing_warning) setPreprocessingWarning(s.preprocessing_warning);
         if (s.status === "complete") {
-          if (pollRef.current) clearInterval(pollRef.current);
-          pollRef.current = null;
           onComplete(run_id);
         } else if (s.status === "failed") {
-          if (pollRef.current) clearInterval(pollRef.current);
-          pollRef.current = null;
           setError("Analysis failed.");
           setProgress(null);
+        } else {
+          pollTimeoutRef.current = setTimeout(() => poll(Math.min(delay * 2, 8000)), delay);
         }
-      }, 3000);
+      };
+      pollTimeoutRef.current = setTimeout(() => poll(2000), 2000);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
       setProgress(null);
@@ -115,7 +120,7 @@ export default function VideoUploader({
       )}
       {progress !== null && (
         <div>
-          <div className="h-2 bg-gray-200 rounded overflow-hidden">
+          <div className="h-2 bg-white/10 rounded overflow-hidden">
             <div
               className="h-full bg-primary transition-all duration-300"
               style={{ width: `${progress}%` }}
@@ -124,15 +129,26 @@ export default function VideoUploader({
           <p className="text-sm text-gray-300 mt-1">{status} {progress}%</p>
         </div>
       )}
-      {error && <p className="text-red-600 text-sm">{error}</p>}
-      <button
-        type="button"
-        onClick={submit}
-        disabled={!file || progress !== null}
-        className="w-full py-3 bg-primary text-background font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-      >
-        Sign in to Analyze
-      </button>
+      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {isSignedIn ? (
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!file || progress !== null}
+          className="w-full py-3 bg-primary text-background font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+        >
+          Analyze
+        </button>
+      ) : (
+        <SignInButton mode="modal">
+          <button
+            type="button"
+            className="w-full py-3 bg-primary text-background font-semibold rounded-lg hover:opacity-90 transition-opacity"
+          >
+            Sign in to Analyze
+          </button>
+        </SignInButton>
+      )}
     </div>
   );
 }

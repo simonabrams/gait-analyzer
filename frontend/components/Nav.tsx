@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SignInButton, UserButton, useAuth } from "@clerk/nextjs";
 
 function ApertureIcon({ className }: { className?: string }) {
   return (
@@ -27,6 +28,7 @@ export default function Nav() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const { isSignedIn } = useAuth();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
@@ -77,12 +79,18 @@ export default function Nav() {
 
         {/* Right actions */}
         <div className="hidden md:flex items-center gap-5">
-          <Link
-            href="/runs"
-            className="text-sm font-medium text-gray-300 hover:text-white transition-colors"
-          >
-            Sign in
-          </Link>
+          {isSignedIn ? (
+            <UserButton />
+          ) : (
+            <SignInButton mode="modal">
+              <button
+                type="button"
+                className="text-sm font-medium text-gray-300 hover:text-white transition-colors"
+              >
+                Sign in
+              </button>
+            </SignInButton>
+          )}
           <Link
             href="/#upload"
             className="bg-primary text-background text-sm font-semibold px-4 py-2 rounded-lg hover:opacity-90 transition-opacity"
@@ -113,13 +121,18 @@ export default function Nav() {
         <div className="md:hidden bg-black/95 border-t border-white/10 py-4 px-6 flex flex-col gap-4">
           {navLink("/runs", "Runs")}
           {navLink("/about", "About")}
-          <Link
-            href="/runs"
-            className="text-sm font-medium text-gray-300 hover:text-white transition-colors"
-            onClick={() => setMenuOpen(false)}
-          >
-            Sign in
-          </Link>
+          {isSignedIn ? (
+            <UserButton />
+          ) : (
+            <SignInButton mode="modal">
+              <button
+                type="button"
+                className="text-sm font-medium text-gray-300 hover:text-white transition-colors text-left"
+              >
+                Sign in
+              </button>
+            </SignInButton>
+          )}
           <Link
             href="/#upload"
             className="bg-primary text-background text-sm font-semibold px-4 py-2 rounded-lg text-center w-fit"
