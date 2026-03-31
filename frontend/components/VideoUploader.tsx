@@ -84,17 +84,23 @@ export default function VideoUploader({
     <div className="space-y-4">
       <div
         {...getRootProps()}
-        className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-          isDragActive ? "border-primary bg-primary/10" : "border-gray-400 bg-white hover:border-gray-500"
+        className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+          isDragActive
+            ? "border-primary bg-primary/10"
+            : "border-white/30 bg-white/5 hover:border-white/50 hover:bg-white/10"
         }`}
       >
         <input {...getInputProps()} />
+        <p className="text-2xl mb-2">⬆️</p>
         {file ? (
-          <p className="text-gray-900">{file.name}</p>
+          <p className="text-white text-sm">{file.name}</p>
         ) : (
-          <p className="text-gray-600">
-            {isDragActive ? "Drop the video here" : "Drag and drop a video (MP4/MOV), or click to select"}
-          </p>
+          <>
+            <p className="text-gray-200 font-medium text-sm">
+              {isDragActive ? "Drop the video here" : "Drag and drop a video"}
+            </p>
+            <p className="text-gray-400 text-xs mt-1">MP4 or MOV · up to 500 MB</p>
+          </>
         )}
       </div>
       <div>
@@ -105,17 +111,17 @@ export default function VideoUploader({
           max={250}
           value={height}
           onChange={(e) => setHeight(Number(e.target.value))}
-          className="border border-gray-300 rounded px-3 py-2 w-24 bg-white text-gray-900"
+          className="border border-white/20 rounded-lg px-3 py-2 w-24 bg-white/10 text-white"
         />
       </div>
       {preprocessingWarning && (
-        <div className="rounded-lg border border-amber-400 bg-amber-50 px-4 py-3 text-amber-800 text-sm">
+        <div className="rounded-lg border border-amber-400/50 bg-amber-400/10 px-4 py-3 text-amber-300 text-sm">
           Your video was trimmed to 3 minutes for processing. For best results, upload a 30–60 second clip.
         </div>
       )}
       {progress !== null && (
         <div>
-          <div className="h-2 bg-gray-200 rounded overflow-hidden">
+          <div className="h-2 bg-white/10 rounded overflow-hidden">
             <div
               className="h-full bg-primary transition-all duration-300"
               style={{ width: `${progress}%` }}
@@ -124,13 +130,13 @@ export default function VideoUploader({
           <p className="text-sm text-gray-300 mt-1">{status} {progress}%</p>
         </div>
       )}
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+      {error && <p className="text-red-400 text-sm">{error}</p>}
       {isSignedIn ? (
         <button
           type="button"
           onClick={submit}
           disabled={!file || progress !== null}
-          className="px-4 py-2 bg-primary text-background font-medium rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+          className="w-full py-3 bg-primary text-background font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
         >
           Analyze
         </button>
@@ -138,7 +144,7 @@ export default function VideoUploader({
         <SignInButton mode="modal">
           <button
             type="button"
-            className="px-4 py-2 bg-primary text-background font-medium rounded-lg hover:opacity-90 transition-opacity"
+            className="w-full py-3 bg-primary text-background font-semibold rounded-lg hover:opacity-90 transition-opacity"
           >
             Sign in to Analyze
           </button>

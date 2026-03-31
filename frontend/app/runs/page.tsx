@@ -82,7 +82,7 @@ export default function RunsPage() {
 
   if (!loading && total === 0) {
     return (
-      <div className="space-y-8">
+      <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-white">Your Runs</h1>
           <p className="text-gray-400 mt-1">Track your progress over time — every run is saved here.</p>
@@ -103,7 +103,7 @@ export default function RunsPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-white">Your Runs</h1>
         <p className="text-gray-400 mt-1">Track your progress over time — every run is saved here.</p>
