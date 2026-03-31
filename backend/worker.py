@@ -3,12 +3,16 @@ Celery app and process_video task: download from R2, preprocess, run job_runner,
 """
 import logging
 import os
+import signal
 import tempfile
 import uuid
 from datetime import datetime
 from pathlib import Path
 
 import celery
+import celery.exceptions
+import sentry_sdk
+from sentry_sdk.integrations.celery import CeleryIntegration
 
 from backend.database import get_db_session
 from backend.job_runner import run_analysis
@@ -25,6 +29,10 @@ logger = logging.getLogger(__name__)
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
+if SENTRY_DSN:
+    sentry_sdk.init(dsn=SENTRY_DSN, integrations=[CeleryIntegration()])
+
 app = celery.Celery(
     "gait_analyzer",
     broker=REDIS_URL,
@@ -33,8 +41,33 @@ app = celery.Celery(
 app.conf.task_serializer = "json"
 app.conf.result_serializer = "json"
 app.conf.accept_content = ["json"]
+# Keep task results in Redis for 1 hour then expire them — prevents Redis filling up.
+app.conf.result_expires = 3600
 # Default to 1 to avoid OOM when API and worker share a container (CLI -c overrides this).
 app.conf.worker_concurrency = int(os.environ.get("CELERY_WORKER_CONCURRENCY", "1"))
+
+# Track the run_id currently being processed so the SIGTERM handler can mark it failed.
+_current_run_id: str | None = None
+
+
+def _handle_sigterm(signum, frame):
+    """On SIGTERM (Render deploy/scale-down), mark the in-flight run as failed so it
+    doesn't stay stuck in 'processing' indefinitely."""
+    if _current_run_id:
+        try:
+            db = get_db_session()
+            run = db.query(Run).filter(Run.id == uuid.UUID(_current_run_id)).first()
+            if run and run.status == RunStatus.processing:
+                run.status = RunStatus.failed
+                run.error_message = "Worker was restarted during processing. Please re-submit."
+                db.commit()
+            db.close()
+        except Exception:
+            pass  # Best-effort; the process is dying anyway
+    raise SystemExit(0)
+
+
+signal.signal(signal.SIGTERM, _handle_sigterm)
 
 
 def _update_progress(run_id: str, progress_pct: int) -> None:
@@ -48,12 +81,18 @@ def _update_progress(run_id: str, progress_pct: int) -> None:
         db.close()
 
 
-@app.task(bind=True, name="backend.worker.process_video")
+# time_limit=600s (hard kill), soft_time_limit=540s (raises SoftTimeLimitExceeded first,
+# allowing clean DB update before the hard kill fires).
+@app.task(bind=True, name="backend.worker.process_video", time_limit=600, soft_time_limit=540)
 def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> None:
+    global _current_run_id
+    _current_run_id = run_id
+
     db = get_db_session()
     run = db.query(Run).filter(Run.id == uuid.UUID(run_id)).first()
     if not run:
         db.close()
+        _current_run_id = None
         return
     temp_path = None
     preprocessed_path = None
@@ -92,11 +131,14 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
 
         max_frames = None
         max_width = None
+        target_fps = None
         try:
             nf = int(os.environ.get("GAIT_MAX_FRAMES", "0"))
             nw = int(os.environ.get("GAIT_MAX_WIDTH", "0"))
+            tf = float(os.environ.get("GAIT_TARGET_FPS", "0"))
             max_frames = nf if nf > 0 else None
             max_width = nw if nw > 0 else None
+            target_fps = tf if tf > 0 else None
         except ValueError:
             pass
 
@@ -106,6 +148,7 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
             progress_callback=on_progress,
             max_frames=max_frames,
             max_width=max_width,
+            target_fps=target_fps,
         )
 
         ann_key = annotated_video_key(run_id)
@@ -126,6 +169,12 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
                 os.unlink(p)
             except OSError:
                 pass
+    except celery.exceptions.SoftTimeLimitExceeded:
+        run.status = RunStatus.failed
+        run.error_message = "Analysis timed out (video may be too long or complex). Please try a shorter clip."
+        run.progress_pct = 0
+        db.commit()
+        raise
     except Exception as e:
         run.status = RunStatus.failed
         run.error_message = str(e)
@@ -133,6 +182,7 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
         db.commit()
         raise
     finally:
+        _current_run_id = None
         db.close()
         if preprocessed_path and os.path.exists(preprocessed_path):
             try:

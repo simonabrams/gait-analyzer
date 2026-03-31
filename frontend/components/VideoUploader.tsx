@@ -68,6 +68,7 @@ export default function VideoUploader({
           setError("Analysis failed.");
           setProgress(null);
         } else {
+          // Still processing — schedule next poll with backed-off delay (max 8s)
           pollTimeoutRef.current = setTimeout(() => poll(Math.min(delay * 2, 8000)), delay);
         }
       };
