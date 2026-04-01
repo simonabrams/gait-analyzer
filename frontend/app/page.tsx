@@ -27,7 +27,7 @@ export default function HomePage() {
       <section
         className="min-h-screen flex flex-col justify-center py-24 relative overflow-hidden"
         style={{
-          backgroundImage: "url(https://unsplash.com/photos/a-man-running-on-the-beach-at-sunset-cpPteaD54nk)",
+          backgroundImage: "url(https://picsum.photos/seed/running-shoes/1600/900)",
           backgroundSize: "cover",
           backgroundPosition: "center top",
         }}
