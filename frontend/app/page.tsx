@@ -27,7 +27,7 @@ export default function HomePage() {
       <section
         className="min-h-screen flex flex-col justify-center py-24 relative overflow-hidden"
         style={{
-          backgroundImage: "url(https://picsum.photos/seed/running-shoes/1600/900)",
+          backgroundImage: "url(images/hero-bg.jpg)",
           backgroundSize: "cover",
           backgroundPosition: "center top",
         }}
@@ -90,11 +90,11 @@ export default function HomePage() {
           </p>
           <div
             className="rounded-2xl overflow-hidden border border-white/10 relative"
-            style={{
-              backgroundImage: "url(https://picsum.photos/seed/treadmill-run/800/600)",
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-            }}
+            // style={{
+            //   backgroundImage: "url(https://picsum.photos/seed/treadmill-run/800/600)",
+            //   backgroundSize: "cover",
+            //   backgroundPosition: "center",
+            // }}
           >
             <div className="absolute inset-0 bg-black/70" />
             <div className="relative z-10 p-7">
@@ -168,7 +168,7 @@ export default function HomePage() {
       <section
         className="py-28 relative overflow-hidden"
         style={{
-          backgroundImage: "url(https://picsum.photos/seed/runners-silhouette/1600/800)",
+          backgroundImage: "url(images/testimonial-bg.jpg)",
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}

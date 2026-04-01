@@ -21,7 +21,7 @@ export default function AboutPage() {
       <section
         className="min-h-[50vh] flex flex-col justify-center py-24 relative overflow-hidden"
         style={{
-          backgroundImage: "url(https://picsum.photos/seed/trail-runner/1600/900)",
+          backgroundImage: "url(images/about-hero-bg.jpg)",
           backgroundSize: "cover",
           backgroundPosition: "center 30%",
         }}
@@ -162,7 +162,7 @@ export default function AboutPage() {
       <section
         className="py-24 relative overflow-hidden"
         style={{
-          backgroundImage: "url(https://picsum.photos/seed/running-track/1600/800)",
+          backgroundImage: "url(images/silhouette-run.jpg)",
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
