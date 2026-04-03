@@ -13,7 +13,12 @@ export default function VideoUploader({
 }: {
   onComplete: (runId: string) => void;
 }) {
-  const [height, setHeight] = useState(175);
+  const [height, setHeight] = useState(() => {
+    if (typeof window === "undefined") return 175;
+    const saved = localStorage.getItem("gait_height_cm");
+    const parsed = saved ? Number(saved) : NaN;
+    return isFinite(parsed) && parsed >= 100 && parsed <= 250 ? parsed : 175;
+  });
   const [file, setFile] = useState<File | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -110,7 +115,11 @@ export default function VideoUploader({
           min={100}
           max={250}
           value={height}
-          onChange={(e) => setHeight(Number(e.target.value))}
+          onChange={(e) => {
+            const val = Number(e.target.value);
+            setHeight(val);
+            localStorage.setItem("gait_height_cm", String(val));
+          }}
           className="border border-white/20 rounded-lg px-3 py-2 w-24 bg-white/10 text-white"
         />
       </div>
