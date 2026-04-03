@@ -4,8 +4,21 @@ import { ClerkProvider } from "@clerk/nextjs";
 import Nav from "@/components/Nav";
 
 export const metadata: Metadata = {
-  title: "Runlens.io",
-  description: "Analyze your running gait from video",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://runlens.io"),
+  title: {
+    default: "Runlens.io",
+    template: "%s — Runlens",
+  },
+  description: "AI-powered running gait analysis. Upload a video, get instant form feedback.",
+  openGraph: {
+    siteName: "Runlens",
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: "@runlens",
+  },
 };
 
 export default function RootLayout({
