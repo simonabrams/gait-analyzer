@@ -179,6 +179,12 @@ export default function AboutPage() {
           >
             Analyze a Run →
           </Link>
+          <p className="mt-6 text-gray-400 text-sm">
+            Questions or feedback?{" "}
+            <a href="mailto:hi@runlens.io" className="text-primary hover:underline">
+              hi@runlens.io
+            </a>
+          </p>
         </div>
       </section>
 
