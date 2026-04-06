@@ -113,11 +113,11 @@ export default async function RunResultPage({ params }: Props) {
 
       {/* Annotated video */}
       {run.annotated_video_url && (
-        <div className="relative bg-black rounded-xl overflow-hidden border border-white/10">
+        <div className="relative bg-black rounded-xl overflow-hidden border border-white/10 flex justify-center">
           <video
             src={run.annotated_video_url}
             controls
-            className="w-full"
+            className="max-h-[520px] w-auto"
             preload="metadata"
           >
             Your browser does not support the video tag.

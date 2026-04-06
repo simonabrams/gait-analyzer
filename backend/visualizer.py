@@ -37,6 +37,11 @@ POSE_CONNECTIONS = [
     (11, 23), (12, 24), (23, 24), (23, 25), (25, 27), (24, 26), (26, 28),
 ]
 
+# BGR colours matching the site's dark theme
+_TEAL = (0, 200, 150)    # #00C896 primary accent
+_GRAY = (160, 160, 160)  # secondary label text
+_WHITE = (255, 255, 255)
+
 
 def build_frame_to_stride_flags(strides, flags):
     flagged_metrics = {f["metric"] for f in flags}
@@ -72,25 +77,52 @@ def get_flagged_joint_set(flagged_metrics):
     return out
 
 
-def _draw_metrics_panel(img, lines, font_scale=0.9, thickness=2, padding=12, alpha=0.6):
+def _fmt(v, decimals=1):
+    """Format a numeric value for the overlay, or return as-is if not a number."""
+    if isinstance(v, float):
+        return f"{v:.{decimals}f}"
+    if isinstance(v, int):
+        return str(v)
+    return str(v)
+
+
+def _draw_metrics_panel(img, lines, font_scale=0.55, thickness=1, padding=8, alpha=0.75):
+    """Draw a styled semi-transparent metrics panel.
+
+    Args:
+        lines: list of (label, value) tuples, e.g. [("Cadence", "130.9 spm"), ...]
+    """
     import cv2
     font = cv2.FONT_HERSHEY_SIMPLEX
     (_, line_h), _ = cv2.getTextSize("Ay", font, font_scale, thickness)
-    line_spacing = int(line_h * 1.3)
+    line_spacing = int(line_h * 1.6)
+
+    # Measure max line width (label + ": " + value rendered together)
     max_w = 0
-    for line in lines:
-        (w, _), _ = cv2.getTextSize(line, font, font_scale, thickness)
+    for label, value in lines:
+        full = f"{label}: {value}"
+        (w, _), _ = cv2.getTextSize(full, font, font_scale, thickness)
         max_w = max(max_w, w)
+
     box_w = max_w + 2 * padding
     box_h = len(lines) * line_spacing + 2 * padding
-    x1, y1 = 12, 12
+    x1, y1 = 10, 10
     x2, y2 = x1 + box_w, y1 + box_h
+
+    # Semi-transparent dark background
     roi = img[y1:y2, x1:x2]
-    overlay = np.full_like(roi, (0, 0, 0), dtype=np.uint8)
+    overlay = np.full_like(roi, (15, 15, 15), dtype=np.uint8)
     img[y1:y2, x1:x2] = cv2.addWeighted(overlay, alpha, roi, 1 - alpha, 0)
+
+    # Draw each line with two-colour text: gray label, teal value
     y0 = y1 + padding + line_h
-    for line in lines:
-        cv2.putText(img, line, (x1 + padding, y0), font, font_scale, (255, 255, 255), thickness)
+    for label, value in lines:
+        label_str = f"{label}: "
+        (lw, _), _ = cv2.getTextSize(label_str, font, font_scale, thickness)
+        cv2.putText(img, label_str, (x1 + padding, y0), font, font_scale,
+                    _GRAY, thickness, cv2.LINE_AA)
+        cv2.putText(img, value, (x1 + padding + lw, y0), font, font_scale,
+                    _TEAL, thickness, cv2.LINE_AA)
         y0 += line_spacing
 
 
@@ -113,12 +145,12 @@ def annotate_single_frame(frame, frame_idx, pose_by_idx, results, frame_flags=No
         pts = [(int(lm_item["x"] * w), int(lm_item["y"] * h)) for lm_item in lm]
         for (a, b) in POSE_CONNECTIONS:
             if a < len(pts) and b < len(pts) and pts[a] and pts[b]:
-                cv2.line(img, pts[a], pts[b], (0, 255, 0), 2)
+                cv2.line(img, pts[a], pts[b], (0, 255, 0), 2, cv2.LINE_AA)
         for j, pt in enumerate(pts):
             if j in flagged_joints:
-                cv2.circle(img, pt, 6, (0, 0, 255), -1)
+                cv2.circle(img, pt, 6, (0, 0, 255), -1, cv2.LINE_AA)
             else:
-                cv2.circle(img, pt, 4, (0, 255, 0), -1)
+                cv2.circle(img, pt, 4, (0, 255, 0), -1, cv2.LINE_AA)
 
     stride_at_frame = _stride_at_frame(frame_idx, strides)
     if stride_at_frame:
@@ -131,11 +163,12 @@ def annotate_single_frame(frame, frame_idx, pose_by_idx, results, frame_flags=No
         osc = summary.get("vertical_osc_avg_cm", "")
         knee = summary.get("knee_angle_strike_avg_deg", "")
         lean = summary.get("trunk_lean_avg_deg", "")
+
     lines = [
-        f"Cadence: {cad} spm",
-        f"Vert osc: {osc} cm",
-        f"Knee @ strike: {knee} deg",
-        f"Trunk lean: {lean} deg",
+        ("Cadence", f"{_fmt(cad)} spm"),
+        ("Vert osc", f"{_fmt(osc)} cm"),
+        ("Knee @ strike", f"{_fmt(knee)} deg"),
+        ("Trunk lean", f"{_fmt(lean)} deg"),
     ]
     _draw_metrics_panel(img, lines)
     return img
