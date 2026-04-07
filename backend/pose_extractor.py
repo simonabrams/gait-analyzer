@@ -18,30 +18,46 @@ RIGHT_KNEE = 26
 LEFT_ANKLE = 27
 RIGHT_ANKLE = 28
 
-# Pose landmarker model: lite variant, good speed/accuracy for gait
-_POSE_MODEL_URL = (
-    "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
-    "pose_landmarker_lite/float16/latest/pose_landmarker_lite.task"
-)
+# Available pose landmarker model variants.
+# Set GAIT_POSE_MODEL=full for higher landmark accuracy at the cost of ~2× inference time.
+# Default: "lite" — good balance of speed and accuracy for most gait analyses.
+_POSE_MODEL_URLS = {
+    "lite": (
+        "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
+        "pose_landmarker_lite/float16/latest/pose_landmarker_lite.task"
+    ),
+    "full": (
+        "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
+        "pose_landmarker_full/float16/latest/pose_landmarker_full.task"
+    ),
+}
+
+
+def _model_variant() -> str:
+    variant = os.environ.get("GAIT_POSE_MODEL", "lite").lower().strip()
+    return variant if variant in _POSE_MODEL_URLS else "lite"
 
 
 def _model_cache_path():
+    variant = _model_variant()
     d = Path(os.environ.get("GAIT_ANALYZER_CACHE", Path(__file__).resolve().parent / ".pose_model"))
     d.mkdir(parents=True, exist_ok=True)
-    return d / "pose_landmarker_lite.task"
+    return d / f"pose_landmarker_{variant}.task"
 
 
 def _ensure_model():
     path = _model_cache_path()
     if path.exists():
         return str(path)
+    url = _POSE_MODEL_URLS[_model_variant()]
     try:
         import urllib.request
-        urllib.request.urlretrieve(_POSE_MODEL_URL, path)
+        urllib.request.urlretrieve(url, path)
     except Exception as e:
         raise RuntimeError(
-            f"Could not download pose model from {_POSE_MODEL_URL}. "
-            f"Download it manually and set GAIT_ANALYZER_CACHE to a dir containing pose_landmarker_lite.task. Error: {e}"
+            f"Could not download pose model from {url}. "
+            f"Download it manually and set GAIT_ANALYZER_CACHE to a dir containing "
+            f"pose_landmarker_{_model_variant()}.task. Error: {e}"
         ) from e
     return str(path)
 
