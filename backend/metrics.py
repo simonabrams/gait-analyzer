@@ -197,7 +197,9 @@ def _detect_foot_strikes(pose_frames, fps=30.0):
                 x = np.arange(len(arr))
                 arr[nans] = np.interp(x[nans], x[~nans], arr[~nans])
             # Negate: find_peaks finds maxima; negating turns minima into maxima.
-            peaks, _ = find_peaks(-arr, distance=min_distance)
+            # prominence filters out tiny SG smoothing artifacts — real ankle dips
+            # are ≥0.10 normalised units deep; ringing noise is typically <0.001.
+            peaks, _ = find_peaks(-arr, distance=min_distance, prominence=0.03)
             return peaks.tolist()
         except ImportError:
             # Pure-Python fallback: manual local-minimum search.
