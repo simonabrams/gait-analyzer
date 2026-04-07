@@ -15,6 +15,15 @@ LEFT_KNEE, RIGHT_KNEE = 25, 26
 LEFT_ANKLE, RIGHT_ANKLE = 27, 28
 LEFT_SHOULDER, RIGHT_SHOULDER = 11, 12
 
+# MediaPipe landmark 0 is the nose (~93% of standing height from floor).
+# Ankle midpoint sits at ~4% of height from floor.
+# Nose-to-ankle therefore spans ≈89% of total body height.
+_NOSE_TO_ANKLE_FRACTION = 0.89
+# Nose-to-hip fallback when ankles are poorly visible (~93% - 47% = 46%).
+_NOSE_TO_HIP_FRACTION = 0.46
+# Minimum ankle visibility score to prefer the head-to-ankle span.
+_ANKLE_VIS_THRESHOLD = 0.5
+
 
 def compute_metrics(pose_frames, height_cm, fps, video_file=""):
     if not pose_frames or not fps or fps <= 0:
@@ -25,7 +34,7 @@ def compute_metrics(pose_frames, height_cm, fps, video_file=""):
         return _empty_results(height_cm, video_file)
 
     scale = _pixel_scale_from_height(valid, height_cm)
-    strikes_left, strikes_right = _detect_foot_strikes(pose_frames)
+    strikes_left, strikes_right = _detect_foot_strikes(pose_frames, fps=fps)
     strides = _build_strides(
         pose_frames, strikes_left, strikes_right, scale, fps, height_cm
     )
@@ -73,24 +82,57 @@ def _empty_results(height_cm, video_file):
 
 
 def _pixel_scale_from_height(pose_frames_with_landmarks, height_cm):
-    total = 0
+    """Return a scale factor in cm-per-normalised-unit.
+
+    Uses the nose→ankle span when both ankles are clearly visible, which
+    spans ≈89% of standing height and provides the most stable reference.
+    Falls back to nose→hip (≈46% of height) when ankles are obscured.
+    Both paths apply the correct body-proportion fraction so that scale
+    errors from torso/limb proportion variance are minimised.
+    """
+    total = 0.0
     count = 0
     for p in pose_frames_with_landmarks:
         lm = p["landmarks"]
-        hip_y = (lm[LEFT_HIP]["y"] + lm[RIGHT_HIP]["y"]) / 2
-        head_y = lm[0]["y"]
-        total += abs(hip_y - head_y)
-        count += 1
-    if count == 0:
+        nose_y = lm[0]["y"]
+        ankle_vis_l = lm[LEFT_ANKLE].get("visibility", 0.0)
+        ankle_vis_r = lm[RIGHT_ANKLE].get("visibility", 0.0)
+        avg_ankle_vis = (ankle_vis_l + ankle_vis_r) / 2.0
+
+        if avg_ankle_vis >= _ANKLE_VIS_THRESHOLD:
+            ankle_y = (lm[LEFT_ANKLE]["y"] + lm[RIGHT_ANKLE]["y"]) / 2.0
+            norm_span = abs(ankle_y - nose_y)
+            real_span_cm = height_cm * _NOSE_TO_ANKLE_FRACTION
+        else:
+            hip_y = (lm[LEFT_HIP]["y"] + lm[RIGHT_HIP]["y"]) / 2.0
+            norm_span = abs(hip_y - nose_y)
+            real_span_cm = height_cm * _NOSE_TO_HIP_FRACTION
+
+        if norm_span > 0:
+            total += real_span_cm / norm_span
+            count += 1
+
+    if count == 0 or total == 0:
         return height_cm
-    avg_norm_height = total / count
-    if avg_norm_height <= 0:
-        return height_cm
-    return height_cm / avg_norm_height
+    return total / count
 
 
-def _savgol_or_passthrough(ys, window=11, polyorder=2):
-    """Apply Savitzky-Golay smoothing to a signal that may contain None values."""
+def _savgol_window(fps):
+    """Return an odd Savitzky-Golay window length ≈350 ms for the given FPS."""
+    window = max(5, int(fps * 0.35))
+    if window % 2 == 0:
+        window += 1
+    return window
+
+
+def _savgol_or_passthrough(ys, fps=30.0, window=None, polyorder=2):
+    """Apply Savitzky-Golay smoothing to a signal that may contain None values.
+
+    The window length scales with FPS so that the effective smoothing duration
+    stays constant (~350 ms) regardless of input frame rate.
+    """
+    if window is None:
+        window = _savgol_window(fps)
     if len(ys) < window:
         return ys
     try:
@@ -113,7 +155,15 @@ def _savgol_or_passthrough(ys, window=11, polyorder=2):
     return [None if ys[i] is None else float(smoothed[i]) for i in range(len(ys))]
 
 
-def _detect_foot_strikes(pose_frames):
+def _detect_foot_strikes(pose_frames, fps=30.0):
+    """Detect per-foot strike frames as local minima of ankle Y (normalised coords).
+
+    In image coordinates Y increases downward, so the ankle reaches its
+    minimum Y value at peak swing — a sharp, repeatable signal that works
+    well for cadence/stride segmentation.  The minimum distance between
+    detected events is clamped to _STRIDE_MIN_SEC * fps so that noise near
+    the trough cannot produce spurious double-detections.
+    """
     left_ys = []
     right_ys = []
     for p in pose_frames:
@@ -125,20 +175,47 @@ def _detect_foot_strikes(pose_frames):
         left_ys.append(lm[LEFT_ANKLE]["y"])
         right_ys.append(lm[RIGHT_ANKLE]["y"])
 
-    left_ys = _savgol_or_passthrough(left_ys)
-    right_ys = _savgol_or_passthrough(right_ys)
+    left_ys = _savgol_or_passthrough(left_ys, fps=fps)
+    right_ys = _savgol_or_passthrough(right_ys, fps=fps)
 
-    def local_min_indices(ys, radius=3):
-        out = []
-        for i in range(radius, len(ys) - radius):
-            if ys[i] is None:
-                continue
-            if all(ys[i] <= ys[j] for j in range(i - radius, i + radius + 1) if ys[j] is not None):
-                out.append(i)
-        return out
+    # Minimum frames separating consecutive strikes for the same foot.
+    min_distance = max(3, int(_STRIDE_MIN_SEC * fps))
 
-    left = local_min_indices(left_ys)
-    right = local_min_indices(right_ys)
+    def find_strikes(ys):
+        try:
+            from scipy.signal import find_peaks
+            import numpy as np
+
+            arr = np.array(
+                [y if y is not None else float("nan") for y in ys], dtype=float
+            )
+            # Interpolate over NaN gaps so find_peaks sees a continuous signal.
+            nans = np.isnan(arr)
+            if nans.all():
+                return []
+            if nans.any():
+                x = np.arange(len(arr))
+                arr[nans] = np.interp(x[nans], x[~nans], arr[~nans])
+            # Negate: find_peaks finds maxima; negating turns minima into maxima.
+            peaks, _ = find_peaks(-arr, distance=min_distance)
+            return peaks.tolist()
+        except ImportError:
+            # Pure-Python fallback: manual local-minimum search.
+            radius = max(3, min_distance // 2)
+            out = []
+            for i in range(radius, len(ys) - radius):
+                if ys[i] is None:
+                    continue
+                if all(
+                    ys[i] <= ys[j]
+                    for j in range(i - radius, i + radius + 1)
+                    if ys[j] is not None
+                ):
+                    out.append(i)
+            return out
+
+    left = find_strikes(left_ys)
+    right = find_strikes(right_ys)
     return left, right
 
 
@@ -183,7 +260,13 @@ def _metrics_for_stride(stride_frames, start_frame, end_frame, scale, height_cm,
     vertical_osc_cm = vertical_osc_norm * scale
 
     strike_frame = _frame_at_index(stride_frames, start_frame)
-    knee_angle = _knee_angle_at_strike(strike_frame, left=True)
+
+    # Average left and right knee angles; use whichever side(s) are available.
+    knee_l = _knee_angle_at_strike(strike_frame, left=True)
+    knee_r = _knee_angle_at_strike(strike_frame, left=False)
+    available_knees = [k for k in [knee_l, knee_r] if k is not None]
+    knee_angle = sum(available_knees) / len(available_knees) if available_knees else None
+
     foot_strike_cm = _foot_strike_position_cm(strike_frame, scale)
     trunk_lean_deg = _trunk_lean_degrees(strike_frame)
 

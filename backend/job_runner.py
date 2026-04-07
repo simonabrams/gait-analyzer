@@ -10,6 +10,7 @@ from pathlib import Path
 
 import cv2
 import matplotlib.pyplot as plt
+import numpy as np
 
 from backend.dashboard import create_dashboard
 from backend.heuristics import evaluate_heuristics
@@ -81,6 +82,12 @@ def run_analysis(
         pose_frames = []
         frames_used = 0
         out_h = out_w = None
+        # Cache each processed frame as JPEG bytes so the annotation pass can replay
+        # them without a second full video decode.  JPEG at quality 92 reduces a raw
+        # 720p frame (~3 MB) to ~150 KB — well within typical worker memory budgets
+        # even for multi-minute clips.
+        frame_cache: list[bytes] = []
+        _JPEG_PARAMS = [int(cv2.IMWRITE_JPEG_QUALITY), 92]
 
         report(10, "Extracting poses...")
         while True:
@@ -105,6 +112,9 @@ def run_analysis(
                 frame = _resize_and_letterbox(frame, max_width)
                 if out_w is None:
                     out_h, out_w = frame.shape[0], frame.shape[1]
+                # Encode and cache before handing the frame to the pose extractor.
+                _, enc = cv2.imencode(".jpg", frame, _JPEG_PARAMS)
+                frame_cache.append(bytes(enc))
                 chunk.append(frame)
                 chunk_timestamps.append(ts_ms)
                 frames_used += 1
@@ -142,21 +152,16 @@ def run_analysis(
         writer = cv2.VideoWriter(
             annotated_video_path, fourcc, out_fps, (out_w, out_h)
         )
-        cap2 = cv2.VideoCapture(str(video_path))
-        for i in range(frames_used):
-            # Mirror the extraction skip so we read the same frames that were analysed
-            for _ in range(frame_skip - 1):
-                cap2.read()
-            ret, frame = cap2.read()
-            if not ret:
-                break
-            frame = _resize_and_letterbox(frame, max_width)
+        for i, jpeg_bytes in enumerate(frame_cache):
+            frame = cv2.imdecode(
+                np.frombuffer(jpeg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR
+            )
             img = annotate_single_frame(
                 frame, i, pose_by_idx, results_from_json, frame_flags
             )
             if img is not None:
                 writer.write(img)
-        cap2.release()
+        frame_cache.clear()
         writer.release()
 
         fd_h264, h264_path = tempfile.mkstemp(suffix=".mp4", prefix="gait_annotated_h264_")
