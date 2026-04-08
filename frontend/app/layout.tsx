@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
+import { Analytics } from "@vercel/analytics/next";
 import Nav from "@/components/Nav";
 
 export const metadata: Metadata = {
@@ -34,6 +35,7 @@ export default function RootLayout({
           <main className="pt-14 min-h-screen">
             {children}
           </main>
+          <Analytics />
         </body>
       </html>
     </ClerkProvider>
