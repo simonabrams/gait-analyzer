@@ -27,7 +27,7 @@ export default function HomePage() {
       <section
         className="min-h-screen flex flex-col justify-center py-24 relative overflow-hidden"
         style={{
-          backgroundImage: "url(images/hero-bg.jpg)",
+          backgroundImage: "url(/images/hero-bg.jpg)",
           backgroundSize: "cover",
           backgroundPosition: "center top",
         }}
@@ -168,7 +168,7 @@ export default function HomePage() {
       <section
         className="py-28 relative overflow-hidden"
         style={{
-          backgroundImage: "url(images/testimonial-bg.jpg)",
+          backgroundImage: "url(/images/testimonial-bg.jpg)",
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
