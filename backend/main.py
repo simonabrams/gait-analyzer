@@ -100,9 +100,15 @@ def _verify_jwt(authorization: str) -> str:
     token = authorization[7:]
     try:
         signing_key = _jwks_client.get_signing_key_from_jwt(token)
-        payload = jwt.decode(token, signing_key.key, algorithms=["RS256"])
+        payload = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            options={"verify_aud": False},
+        )
         return payload["sub"]
-    except Exception:
+    except Exception as e:
+        logger.warning("JWT verification failed: %s: %s", type(e).__name__, e)
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
