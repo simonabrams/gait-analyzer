@@ -57,12 +57,16 @@ export default function VideoUploader({
     setProcessingProgress(null);
     setStatus("Uploading...");
     try {
-      const token = await getToken();
-      if (!token) throw new Error("Not signed in");
-
       const form = new FormData();
       form.append("file", file);
       form.append("height_cm", String(height));
+
+      // Use a longer-lived JWT template (10 min) so the token doesn't expire
+      // mid-upload for large files on slow connections. The default session
+      // token is only 60s, which isn't enough for multi-minute uploads.
+      const token = await getToken({ template: "upload" });
+      if (!token) throw new Error("Not signed in");
+
       const { run_id } = await createRunWithProgress(form, token, (pct) => {
         setUploadProgress(pct);
       });

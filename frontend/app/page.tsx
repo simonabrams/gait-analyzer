@@ -3,19 +3,23 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
 import VideoUploader from "@/components/VideoUploader";
 import { listRuns, SAMPLE_RUN_ID } from "@/lib/api";
 import Footer from "@/components/Footer";
 
 export default function HomePage() {
   const router = useRouter();
+  const { isSignedIn, getToken } = useAuth();
   const [hasRuns, setHasRuns] = useState(false);
 
   useEffect(() => {
-    listRuns()
+    if (!isSignedIn) return;
+    getToken()
+      .then((token) => listRuns(undefined, token ?? undefined))
       .then((r) => setHasRuns(r.total > 0))
       .catch(() => setHasRuns(false));
-  }, []);
+  }, [isSignedIn, getToken]);
 
   const handleComplete = (runId: string) => {
     router.push(`/runs/${runId}`);
