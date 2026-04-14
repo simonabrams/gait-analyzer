@@ -1,8 +1,14 @@
+interface Exercise {
+  name: string;
+  description: string;
+}
+
 interface Flag {
   metric: string;
   value?: unknown;
   threshold?: unknown;
   recommendation: string;
+  exercises?: Exercise[];
 }
 
 interface FeedbackCardsProps {
@@ -101,6 +107,21 @@ export default function FeedbackCards({ flags, hasData }: FeedbackCardsProps) {
                 </p>
               )}
             </div>
+
+            {/* Drills */}
+            {f.exercises && f.exercises.length > 0 && (
+              <div className="border-t border-white/10 pt-3 space-y-2.5">
+                <p className="text-xs font-semibold tracking-widest text-primary uppercase">
+                  Drills to try
+                </p>
+                {f.exercises.map((ex) => (
+                  <div key={ex.name}>
+                    <p className="text-xs font-semibold text-white">{ex.name}</p>
+                    <p className="text-xs text-gray-400 leading-relaxed mt-0.5">{ex.description}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         );
       })}
