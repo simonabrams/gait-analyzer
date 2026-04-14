@@ -10,6 +10,12 @@ from datetime import datetime, timezone
 _STRIDE_MIN_SEC = 0.25
 _STRIDE_MAX_SEC = 1.5
 
+# Foot-strike detection tuning
+_VIS_THRESHOLD = 0.5    # MediaPipe ankle confidence below this → treat as missing
+_STRIKE_RADIUS = 6      # Local-max search radius in frames (±6 ≈ ±0.2 s at 30 fps)
+_MIN_PROMINENCE = 0.02  # Peak must rise this much above the local trough (normalised coords)
+_SMOOTH_WINDOW = 7      # Savitzky-Golay window — smaller preserves stride peaks better
+
 LEFT_HIP, RIGHT_HIP = 23, 24
 LEFT_KNEE, RIGHT_KNEE = 25, 26
 LEFT_ANKLE, RIGHT_ANKLE = 27, 28
@@ -38,6 +44,12 @@ def compute_metrics(pose_frames, height_cm, fps, video_file=""):
     strides = _build_strides(
         pose_frames, strikes_left, strikes_right, scale, fps, height_cm
     )
+    # If left ankle produced too few strides (occlusion, motion blur on that side),
+    # retry using the right ankle as the primary stride boundary.
+    if len(strides) < 2 and len(strikes_right) > len(strikes_left):
+        strides = _build_strides(
+            pose_frames, strikes_right, strikes_left, scale, fps, height_cm
+        )
 
     if not strides:
         return _empty_results(height_cm, video_file)
@@ -156,68 +168,100 @@ def _savgol_or_passthrough(ys, fps=30.0, window=None, polyorder=2):
 
 
 def _detect_foot_strikes(pose_frames, fps=30.0):
-    """Detect per-foot strike frames as local minima of ankle Y (normalised coords).
+    """Return (strikes_left, strikes_right) as lists of frame indices.
 
-    In image coordinates Y increases downward, so the ankle reaches its
-    minimum Y value at peak swing — a sharp, repeatable signal that works
-    well for cadence/stride segmentation.  The minimum distance between
-    detected events is clamped to _STRIDE_MIN_SEC * fps so that noise near
-    the trough cannot produce spurious double-detections.
+    Detection strategy: foot strike = ankle at its HIGHEST y value (lowest
+    position in frame, i.e. on the ground). Ground-contact frames are sharper
+    than airborne ones, so this uses the most reliable part of the signal.
+
+    Low-confidence ankle positions (motion blur, occlusion) are discarded
+    before smoothing so they get interpolated over rather than corrupting the
+    signal. The minimum distance between detected events is clamped to
+    _STRIDE_MIN_SEC * fps so that noise near the peak cannot produce spurious
+    double-detections.
     """
     left_ys = []
     right_ys = []
     for p in pose_frames:
-        lm = p["landmarks"]
+        lm = p.get("landmarks")
         if lm is None:
             left_ys.append(None)
             right_ys.append(None)
             continue
-        left_ys.append(lm[LEFT_ANKLE]["y"])
-        right_ys.append(lm[RIGHT_ANKLE]["y"])
+        l_vis = lm[LEFT_ANKLE].get("visibility", 1.0)
+        r_vis = lm[RIGHT_ANKLE].get("visibility", 1.0)
+        left_ys.append(lm[LEFT_ANKLE]["y"] if l_vis >= _VIS_THRESHOLD else None)
+        right_ys.append(lm[RIGHT_ANKLE]["y"] if r_vis >= _VIS_THRESHOLD else None)
 
-    left_ys = _savgol_or_passthrough(left_ys, fps=fps)
-    right_ys = _savgol_or_passthrough(right_ys, fps=fps)
+    left_ys_raw = list(left_ys)
+    right_ys_raw = list(right_ys)
+    left_ys_smooth = _savgol_or_passthrough(left_ys, fps=fps)
+    right_ys_smooth = _savgol_or_passthrough(right_ys, fps=fps)
 
     # Minimum frames separating consecutive strikes for the same foot.
     min_distance = max(3, int(_STRIDE_MIN_SEC * fps))
 
-    def find_strikes(ys):
+    def find_maxima(ys_raw, ys_smoothed):
+        """Find local maxima in smoothed signal, then snap to exact peak in raw signal.
+
+        Smoothing suppresses noise (avoids false peaks), but the exact strike
+        frame is taken from the original gap-filled signal to avoid the SG
+        polynomial shifting the peak location by 1–2 frames.
+        """
         try:
             from scipy.signal import find_peaks
             import numpy as np
 
-            arr = np.array(
-                [y if y is not None else float("nan") for y in ys], dtype=float
-            )
-            # Interpolate over NaN gaps so find_peaks sees a continuous signal.
-            nans = np.isnan(arr)
-            if nans.all():
+            def fill_gaps(vals):
+                arr = np.array(
+                    [v if v is not None else float("nan") for v in vals], dtype=float
+                )
+                nans = np.isnan(arr)
+                if nans.all():
+                    return arr, True
+                if nans.any():
+                    x = np.arange(len(arr))
+                    arr[nans] = np.interp(x[nans], x[~nans], arr[~nans])
+                return arr, False
+
+            raw_arr, all_nan = fill_gaps(ys_raw)
+            if all_nan:
                 return []
-            if nans.any():
-                x = np.arange(len(arr))
-                arr[nans] = np.interp(x[nans], x[~nans], arr[~nans])
-            # Negate: find_peaks finds maxima; negating turns minima into maxima.
-            # prominence filters out tiny SG smoothing artifacts — real ankle dips
-            # are ≥0.10 normalised units deep; ringing noise is typically <0.001.
-            peaks, _ = find_peaks(-arr, distance=min_distance, prominence=0.03)
-            return peaks.tolist()
+            smooth_arr, _ = fill_gaps(ys_smoothed)
+
+            # Find approximate peaks in smoothed signal (noise-resilient)
+            approx_peaks, _ = find_peaks(
+                smooth_arr, distance=min_distance, prominence=_MIN_PROMINENCE
+            )
+
+            # Snap each approximate peak to the true maximum within ±_STRIKE_RADIUS
+            # in the original signal so SG shift doesn't corrupt stride timestamps.
+            refined = []
+            for p in approx_peaks:
+                lo = max(0, p - _STRIKE_RADIUS)
+                hi = min(len(raw_arr), p + _STRIKE_RADIUS + 1)
+                offset = int(np.argmax(raw_arr[lo:hi]))
+                refined.append(lo + offset)
+            return refined
+
         except ImportError:
-            # Pure-Python fallback: manual local-minimum search.
-            radius = max(3, min_distance // 2)
+            # Pure-Python fallback: manual local-maximum search on raw signal.
+            radius = max(_STRIKE_RADIUS, min_distance // 2)
             out = []
-            for i in range(radius, len(ys) - radius):
-                if ys[i] is None:
+            for i in range(radius, len(ys_raw) - radius):
+                if ys_raw[i] is None:
                     continue
-                if all(
-                    ys[i] <= ys[j]
-                    for j in range(i - radius, i + radius + 1)
-                    if ys[j] is not None
-                ):
-                    out.append(i)
+                neighbourhood = [ys_raw[j] for j in range(i - radius, i + radius + 1)
+                                 if ys_raw[j] is not None]
+                if not neighbourhood or ys_raw[i] < max(neighbourhood):
+                    continue
+                if ys_raw[i] - min(neighbourhood) < _MIN_PROMINENCE:
+                    continue
+                out.append(i)
             return out
 
-    left = find_strikes(left_ys)
-    right = find_strikes(right_ys)
+    left = find_maxima(left_ys_raw, left_ys_smooth)
+    right = find_maxima(right_ys_raw, right_ys_smooth)
     return left, right
 
 
@@ -251,26 +295,30 @@ def _build_strides(pose_frames, strikes_left, strikes_right, scale, fps, height_
 def _metrics_for_stride(stride_frames, start_frame, end_frame, scale, height_cm, duration_sec):
     steps_per_min = (2 * 60 / duration_sec) if duration_sec > 0 else 0
 
+    # Vertical oscillation — use only high-confidence hip frames to avoid
+    # a single blurry frame inflating the max-min range.
     hip_ys = []
     for p in stride_frames:
-        if p["landmarks"] is None:
+        lm = p.get("landmarks")
+        if lm is None:
             continue
-        lm = p["landmarks"]
-        hy = (lm[LEFT_HIP]["y"] + lm[RIGHT_HIP]["y"]) / 2
-        hip_ys.append(hy)
+        if (lm[LEFT_HIP].get("visibility", 1.0) < _VIS_THRESHOLD
+                or lm[RIGHT_HIP].get("visibility", 1.0) < _VIS_THRESHOLD):
+            continue
+        hip_ys.append((lm[LEFT_HIP]["y"] + lm[RIGHT_HIP]["y"]) / 2)
     vertical_osc_norm = (max(hip_ys) - min(hip_ys)) if hip_ys else 0
     vertical_osc_cm = vertical_osc_norm * scale
 
-    strike_frame = _frame_at_index(stride_frames, start_frame)
+    # Knee angle — averaged over a small window around the strike frame so one
+    # blurry frame doesn't determine the whole reading.
+    knee_angle = _knee_angle_window(stride_frames, start_frame, left=True)
 
-    # Average left and right knee angles; use whichever side(s) are available.
-    knee_l = _knee_angle_at_strike(strike_frame, left=True)
-    knee_r = _knee_angle_at_strike(strike_frame, left=False)
-    available_knees = [k for k in [knee_l, knee_r] if k is not None]
-    knee_angle = sum(available_knees) / len(available_knees) if available_knees else None
+    # Foot strike position — small window average around the strike for the same reason.
+    foot_strike_cm = _foot_strike_position_window(stride_frames, start_frame, scale)
 
-    foot_strike_cm = _foot_strike_position_cm(strike_frame, scale)
-    trunk_lean_deg = _trunk_lean_degrees(strike_frame)
+    # Trunk lean — averaged across the full stride; it's a posture metric and
+    # more meaningful as a per-stride mean than a single-frame snapshot.
+    trunk_lean_deg = _trunk_lean_avg(stride_frames)
 
     return {
         "cadence": round(steps_per_min, 1),
@@ -299,47 +347,74 @@ def _angle_between_vectors(v1, v2):
     return math.degrees(math.acos(cos_a))
 
 
-def _knee_angle_at_strike(frame_data, left=True):
-    if frame_data is None or frame_data.get("landmarks") is None:
-        return None
-    lm = frame_data["landmarks"]
-    if left:
-        hip, knee, ankle = LEFT_HIP, LEFT_KNEE, LEFT_ANKLE
-    else:
-        hip, knee, ankle = RIGHT_HIP, RIGHT_KNEE, RIGHT_ANKLE
-    v1 = (lm[hip]["x"] - lm[knee]["x"], lm[hip]["y"] - lm[knee]["y"])
-    v2 = (lm[ankle]["x"] - lm[knee]["x"], lm[ankle]["y"] - lm[knee]["y"])
-    return _angle_between_vectors(v1, v2)
+def _knee_angle_window(stride_frames, strike_frame_idx, left=True, window=2):
+    """Average knee angle over ±window frames around the strike.
+
+    Averaging across a small neighbourhood means one blurry or mis-detected
+    frame near the foot strike doesn't dominate the reading.
+    """
+    hip_idx, knee_idx, ankle_idx = (LEFT_HIP, LEFT_KNEE, LEFT_ANKLE) if left else (RIGHT_HIP, RIGHT_KNEE, RIGHT_ANKLE)
+    angles = []
+    for p in stride_frames:
+        if abs(p["frame_idx"] - strike_frame_idx) > window:
+            continue
+        lm = p.get("landmarks")
+        if lm is None:
+            continue
+        if (lm[knee_idx].get("visibility", 1.0) < _VIS_THRESHOLD
+                or lm[hip_idx].get("visibility", 1.0) < _VIS_THRESHOLD):
+            continue
+        v1 = (lm[hip_idx]["x"] - lm[knee_idx]["x"], lm[hip_idx]["y"] - lm[knee_idx]["y"])
+        v2 = (lm[ankle_idx]["x"] - lm[knee_idx]["x"], lm[ankle_idx]["y"] - lm[knee_idx]["y"])
+        angle = _angle_between_vectors(v1, v2)
+        if angle is not None:
+            angles.append(angle)
+    return sum(angles) / len(angles) if angles else None
 
 
-def _foot_strike_position_cm(frame_data, scale):
-    if frame_data is None or frame_data.get("landmarks") is None:
-        return None
-    lm = frame_data["landmarks"]
-    hip_x = (lm[LEFT_HIP]["x"] + lm[RIGHT_HIP]["x"]) / 2
-    ankle_x = lm[LEFT_ANKLE]["x"]
-    dx = ankle_x - hip_x
-    return abs(dx) * scale if scale else None
+def _foot_strike_position_window(stride_frames, strike_frame_idx, scale, window=2):
+    """Average foot-strike overstride distance over ±window frames around the strike."""
+    values = []
+    for p in stride_frames:
+        if abs(p["frame_idx"] - strike_frame_idx) > window:
+            continue
+        lm = p.get("landmarks")
+        if lm is None:
+            continue
+        if lm[LEFT_ANKLE].get("visibility", 1.0) < _VIS_THRESHOLD:
+            continue
+        hip_x = (lm[LEFT_HIP]["x"] + lm[RIGHT_HIP]["x"]) / 2
+        dx = lm[LEFT_ANKLE]["x"] - hip_x
+        values.append(abs(dx) * scale)
+    return sum(values) / len(values) if values else None
 
 
-def _trunk_lean_degrees(frame_data):
-    if frame_data is None or frame_data.get("landmarks") is None:
-        return None
-    lm = frame_data["landmarks"]
-    shoulder_x = (lm[LEFT_SHOULDER]["x"] + lm[RIGHT_SHOULDER]["x"]) / 2
-    shoulder_y = (lm[LEFT_SHOULDER]["y"] + lm[RIGHT_SHOULDER]["y"]) / 2
-    hip_x = (lm[LEFT_HIP]["x"] + lm[RIGHT_HIP]["x"]) / 2
-    hip_y = (lm[LEFT_HIP]["y"] + lm[RIGHT_HIP]["y"]) / 2
-    dx = shoulder_x - hip_x
-    dy = shoulder_y - hip_y
-    vertical = (0, -1)
-    trunk = (dx, dy)
-    angle = _angle_between_vectors(vertical, trunk)
-    if angle is None:
-        return None
-    if dx > 0:
-        return angle
-    return -angle
+def _trunk_lean_avg(stride_frames):
+    """Trunk lean averaged across all high-confidence frames in the stride.
+
+    Trunk lean is a posture metric — averaging over the whole stride gives a
+    stable, representative number rather than a noisy single-frame snapshot.
+    """
+    angles = []
+    for p in stride_frames:
+        lm = p.get("landmarks")
+        if lm is None:
+            continue
+        if (lm[LEFT_SHOULDER].get("visibility", 1.0) < _VIS_THRESHOLD
+                or lm[RIGHT_SHOULDER].get("visibility", 1.0) < _VIS_THRESHOLD
+                or lm[LEFT_HIP].get("visibility", 1.0) < _VIS_THRESHOLD
+                or lm[RIGHT_HIP].get("visibility", 1.0) < _VIS_THRESHOLD):
+            continue
+        shoulder_x = (lm[LEFT_SHOULDER]["x"] + lm[RIGHT_SHOULDER]["x"]) / 2
+        shoulder_y = (lm[LEFT_SHOULDER]["y"] + lm[RIGHT_SHOULDER]["y"]) / 2
+        hip_x = (lm[LEFT_HIP]["x"] + lm[RIGHT_HIP]["x"]) / 2
+        hip_y = (lm[LEFT_HIP]["y"] + lm[RIGHT_HIP]["y"]) / 2
+        dx = shoulder_x - hip_x
+        dy = shoulder_y - hip_y
+        angle = _angle_between_vectors((0, -1), (dx, dy))
+        if angle is not None:
+            angles.append(angle if dx > 0 else -angle)
+    return sum(angles) / len(angles) if angles else None
 
 
 def _compute_summary(strides):

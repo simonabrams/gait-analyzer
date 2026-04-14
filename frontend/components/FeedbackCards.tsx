@@ -7,6 +7,7 @@ interface Flag {
 
 interface FeedbackCardsProps {
   flags: Flag[] | undefined;
+  hasData: boolean;
 }
 
 function metricIcon(metric: string): string {
@@ -34,8 +35,9 @@ function humanLabel(metric: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export default function FeedbackCards({ flags }: FeedbackCardsProps) {
+export default function FeedbackCards({ flags, hasData }: FeedbackCardsProps) {
   if (!flags?.length) {
+    if (!hasData) return null;
     return (
       <div className="bg-secondary border border-white/10 rounded-xl p-5 flex items-center gap-3">
         <span className="text-xl">✅</span>

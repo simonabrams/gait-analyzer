@@ -8,8 +8,8 @@ LEFT_ANKLE, RIGHT_ANKLE = 27, 28
 LEFT_SHOULDER, RIGHT_SHOULDER = 11, 12
 
 
-def _landmark(x, y):
-    return {"x": x, "y": y}
+def _landmark(x, y, visibility=1.0):
+    return {"x": x, "y": y, "visibility": visibility}
 
 
 def _pose_frame(frame_idx, left_ankle_y, right_ankle_y, hip_y=0.5, head_y=0.2):
@@ -31,17 +31,24 @@ def _pose_frame(frame_idx, left_ankle_y, right_ankle_y, hip_y=0.5, head_y=0.2):
 
 
 def _frames_with_strikes_at(strike_indices_left, num_frames, hip_y=0.5, head_y=0.2, hip_y_fn=None):
-    """Build pose_frames so left ankle has strict local minima only at strike_indices_left (radius 3)."""
+    """Build pose_frames so left ankle has local MAXIMA at strike_indices_left.
+
+    Detection now uses local maxima: foot on ground = highest y value in frame.
+      strike frames  : left_y = 0.85  (foot down, prominent peak)
+      within-6 frames: left_y = 0.76  (transitioning, forms the peak flanks)
+      all others     : left_y = 0.65  (foot in air, low y)
+    Right ankle is always at ~0.65 so it won't produce any detected strikes.
+    """
     strike_set = set(strike_indices_left)
     out = []
     for i in range(num_frames):
         if i in strike_set:
-            left_y = 0.75
-        elif any(0 < abs(i - s) <= 3 for s in strike_set):
-            left_y = 0.76
+            left_y = 0.85   # foot on ground → local maximum
+        elif any(0 < abs(i - s) <= 6 for s in strike_set):
+            left_y = 0.76   # transitioning
         else:
-            left_y = 0.85 + i * 1e-6
-        right_y = 0.85 + i * 1e-6
+            left_y = 0.65 + i * 1e-6   # foot in air → low y
+        right_y = 0.65 + i * 1e-6
         hy = hip_y_fn(i) if hip_y_fn else hip_y
         out.append(_pose_frame(i, left_y, right_y, hip_y=hy, head_y=head_y))
     return out
@@ -174,3 +181,73 @@ def test_negative_fps_returns_empty():
     result = compute_metrics(frames, 175, -1.0)
     assert result["summary"] == {}
     assert result["strides"] == []
+
+
+# ---- Visibility filtering ----
+
+def _pose_frame_with_low_vis_ankles(frame_idx, left_ankle_y, right_ankle_y, visibility=0.1):
+    """Pose frame where ankle landmarks have low visibility (motion blur simulation)."""
+    return {
+        "frame_idx": frame_idx,
+        "landmarks": {
+            0: _landmark(0.5, 0.2),
+            LEFT_SHOULDER: _landmark(0.4, 0.35),
+            RIGHT_SHOULDER: _landmark(0.6, 0.35),
+            LEFT_HIP: _landmark(0.45, 0.5),
+            RIGHT_HIP: _landmark(0.55, 0.5),
+            LEFT_KNEE: _landmark(0.45, 0.65),
+            RIGHT_KNEE: _landmark(0.55, 0.65),
+            LEFT_ANKLE: _landmark(0.45, left_ankle_y, visibility=visibility),
+            RIGHT_ANKLE: _landmark(0.55, right_ankle_y, visibility=visibility),
+        },
+    }
+
+
+def test_low_visibility_frames_ignored():
+    """Frames with low ankle visibility are skipped — blurry frames don't corrupt the signal."""
+    strike_set = {10, 40}
+    frames = []
+    for i in range(50):
+        if i in strike_set:
+            frames.append(_pose_frame(i, 0.85, 0.65))   # high-vis strike frame
+        elif any(0 < abs(i - s) <= 6 for s in strike_set):
+            frames.append(_pose_frame(i, 0.76, 0.65))   # high-vis flank
+        else:
+            # Simulate blurry airborne frames with random-ish noisy y and low visibility
+            noisy_y = 0.85 - (i % 5) * 0.03            # would look like spurious peaks if trusted
+            frames.append(_pose_frame_with_low_vis_ankles(i, noisy_y, 0.65, visibility=0.2))
+    result = compute_metrics(frames, 175, 30.0)
+    # Should still detect the two valid strikes and produce one stride
+    assert result["summary"].get("cadence_avg") is not None
+    assert result["summary"]["num_strides"] >= 1
+
+
+def test_right_ankle_fallback():
+    """If left ankle produces no strides but right ankle does, fall back to right."""
+    strike_set = {15, 50, 85}
+    frames = []
+    for i in range(100):
+        # Left ankle has no visibility — always blurry
+        if i in strike_set:
+            right_y = 0.85
+        elif any(0 < abs(i - s) <= 6 for s in strike_set):
+            right_y = 0.76
+        else:
+            right_y = 0.65 + i * 1e-6
+        frames.append({
+            "frame_idx": i,
+            "landmarks": {
+                0: _landmark(0.5, 0.2),
+                LEFT_SHOULDER: _landmark(0.4, 0.35),
+                RIGHT_SHOULDER: _landmark(0.6, 0.35),
+                LEFT_HIP: _landmark(0.45, 0.5),
+                RIGHT_HIP: _landmark(0.55, 0.5),
+                LEFT_KNEE: _landmark(0.45, 0.65),
+                RIGHT_KNEE: _landmark(0.55, 0.65),
+                LEFT_ANKLE: _landmark(0.45, 0.65 + i * 1e-6, visibility=0.1),  # never reliable
+                RIGHT_ANKLE: _landmark(0.55, right_y),
+            },
+        })
+    result = compute_metrics(frames, 175, 30.0)
+    assert result["summary"].get("cadence_avg") is not None
+    assert result["summary"]["num_strides"] >= 2
