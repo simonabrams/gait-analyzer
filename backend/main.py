@@ -105,8 +105,12 @@ def _verify_jwt(authorization: str) -> str:
             signing_key.key,
             algorithms=["RS256"],
             options={"verify_aud": False},
+            leeway=30,  # 30s tolerance for clock skew between browser and server
         )
         return payload["sub"]
+    except jwt.ExpiredSignatureError as e:
+        logger.warning("JWT expired (token issued before upload completed?): %s", e)
+        raise HTTPException(status_code=401, detail="Token expired — please reload and try again")
     except Exception as e:
         logger.warning("JWT verification failed: %s: %s", type(e).__name__, e)
         raise HTTPException(status_code=401, detail="Invalid or expired token")
