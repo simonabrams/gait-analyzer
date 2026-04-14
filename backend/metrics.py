@@ -236,8 +236,10 @@ def _detect_foot_strikes(pose_frames, fps=30.0):
 
             # Snap each approximate peak to the true maximum within ±_STRIKE_RADIUS
             # in the original signal so SG shift doesn't corrupt stride timestamps.
+            # Convert to Python int explicitly — numpy.int64 from find_peaks is not
+            # JSON serializable and would propagate into start_frame/end_frame.
             refined = []
-            for p in approx_peaks:
+            for p in approx_peaks.tolist():  # .tolist() converts numpy.int64 → int
                 lo = max(0, p - _STRIKE_RADIUS)
                 hi = min(len(raw_arr), p + _STRIKE_RADIUS + 1)
                 offset = int(np.argmax(raw_arr[lo:hi]))

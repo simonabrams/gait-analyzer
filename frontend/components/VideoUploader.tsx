@@ -5,6 +5,15 @@ import { useDropzone } from "react-dropzone";
 import { useAuth, SignInButton } from "@clerk/nextjs";
 import { createRunWithProgress, getRunStatus } from "@/lib/api";
 
+function getProcessingStage(pct: number): string {
+  if (pct >= 90) return "Writing report…";
+  if (pct >= 70) return "Building dashboard…";
+  if (pct >= 50) return "Generating annotated video…";
+  if (pct >= 40) return "Computing metrics…";
+  if (pct >= 10) return "Extracting pose data…";
+  return "Preprocessing video…";
+}
+
 const ALLOWED = { "video/mp4": [".mp4"], "video/quicktime": [".mov"] };
 const MAX_SIZE = 500 * 1024 * 1024;
 
@@ -156,14 +165,28 @@ export default function VideoUploader({
         </div>
       )}
       {processingProgress !== null && (
-        <div>
+        <div className="space-y-2">
           <div className="h-2 bg-white/10 rounded overflow-hidden">
-            <div
-              className="h-full bg-primary transition-all duration-300"
-              style={{ width: `${processingProgress}%` }}
-            />
+            {processingProgress === 0 ? (
+              <div className="h-full w-1/3 bg-primary rounded animate-pulse" />
+            ) : (
+              <div
+                className="h-full bg-primary transition-all duration-500"
+                style={{ width: `${processingProgress}%` }}
+              />
+            )}
           </div>
-          <p className="text-sm text-gray-300 mt-1">{status} {processingProgress}%</p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-300">{getProcessingStage(processingProgress)}</p>
+            {processingProgress > 0 && (
+              <p className="text-xs text-gray-500">{processingProgress}%</p>
+            )}
+          </div>
+          {processingProgress === 0 && (
+            <p className="text-xs text-gray-500">
+              Larger videos take longer to preprocess — this can take a minute or two.
+            </p>
+          )}
         </div>
       )}
       {error && <p className="text-red-400 text-sm">{error}</p>}

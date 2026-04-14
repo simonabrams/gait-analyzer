@@ -73,7 +73,7 @@ export default function HomePage() {
             </span>
             <span className="text-gray-600">·</span>
             <span className="flex items-center gap-2">
-              <span className="text-base">⚡</span> Results in ~60s
+              <span className="text-base">⚡</span> Results in minutes
             </span>
             <span className="text-gray-600">·</span>
             <span className="flex items-center gap-2">
