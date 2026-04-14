@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useAuth, SignInButton } from "@clerk/nextjs";
-import { createRun, getRunStatus } from "@/lib/api";
+import { createRunWithProgress, getRunStatus } from "@/lib/api";
 
 const ALLOWED = { "video/mp4": [".mp4"], "video/quicktime": [".mov"] };
 const MAX_SIZE = 500 * 1024 * 1024;
@@ -20,7 +20,8 @@ export default function VideoUploader({
     return isFinite(parsed) && parsed >= 100 && parsed <= 250 ? parsed : 175;
   });
   const [file, setFile] = useState<File | null>(null);
-  const [progress, setProgress] = useState<number | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [processingProgress, setProcessingProgress] = useState<number | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [preprocessingWarning, setPreprocessingWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,19 +39,22 @@ export default function VideoUploader({
     setError(null);
   }, []);
 
+  const isActive = uploadProgress !== null || processingProgress !== null;
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: ALLOWED,
     maxSize: MAX_SIZE,
     maxFiles: 1,
-    disabled: progress !== null,
+    disabled: isActive,
   });
 
   const submit = async () => {
     if (!file) return;
     setError(null);
     setPreprocessingWarning(null);
-    setProgress(0);
+    setUploadProgress(0);
+    setProcessingProgress(null);
     setStatus("Uploading...");
     try {
       const token = await getToken();
@@ -59,19 +63,26 @@ export default function VideoUploader({
       const form = new FormData();
       form.append("file", file);
       form.append("height_cm", String(height));
-      const { run_id } = await createRun(form, token);
+      const { run_id } = await createRunWithProgress(form, token, (pct) => {
+        setUploadProgress(pct);
+      });
+
+      // Upload done — switch to processing phase
+      setUploadProgress(null);
+      setProcessingProgress(0);
       setStatus("Processing...");
+
       // Exponential backoff: 2s → 4s → 8s (capped). Reduces poll requests from ~20 to ~8 per run.
       const poll = async (delay: number) => {
         const s = await getRunStatus(run_id);
-        setProgress(s.progress);
+        setProcessingProgress(s.progress);
         setStatus(s.status === "processing" ? "Processing..." : s.status);
         if (s.preprocessing_warning) setPreprocessingWarning(s.preprocessing_warning);
         if (s.status === "complete") {
           onComplete(run_id);
         } else if (s.status === "failed") {
           setError("Analysis failed.");
-          setProgress(null);
+          setProcessingProgress(null);
         } else {
           // Still processing — schedule next poll with backed-off delay (max 8s)
           pollTimeoutRef.current = setTimeout(() => poll(Math.min(delay * 2, 8000)), delay);
@@ -80,7 +91,8 @@ export default function VideoUploader({
       pollTimeoutRef.current = setTimeout(() => poll(2000), 2000);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
-      setProgress(null);
+      setUploadProgress(null);
+      setProcessingProgress(null);
       setStatus(null);
     }
   };
@@ -128,15 +140,26 @@ export default function VideoUploader({
           Your video was trimmed to 3 minutes for processing. For best results, upload a 30–60 second clip.
         </div>
       )}
-      {progress !== null && (
+      {uploadProgress !== null && (
         <div>
           <div className="h-2 bg-white/10 rounded overflow-hidden">
             <div
               className="h-full bg-primary transition-all duration-300"
-              style={{ width: `${progress}%` }}
+              style={{ width: `${uploadProgress}%` }}
             />
           </div>
-          <p className="text-sm text-gray-300 mt-1">{status} {progress}%</p>
+          <p className="text-sm text-gray-300 mt-1">Uploading… {uploadProgress}%</p>
+        </div>
+      )}
+      {processingProgress !== null && (
+        <div>
+          <div className="h-2 bg-white/10 rounded overflow-hidden">
+            <div
+              className="h-full bg-primary transition-all duration-300"
+              style={{ width: `${processingProgress}%` }}
+            />
+          </div>
+          <p className="text-sm text-gray-300 mt-1">{status} {processingProgress}%</p>
         </div>
       )}
       {error && <p className="text-red-400 text-sm">{error}</p>}
@@ -144,7 +167,7 @@ export default function VideoUploader({
         <button
           type="button"
           onClick={submit}
-          disabled={!file || progress !== null}
+          disabled={!file || isActive}
           className="w-full py-3 bg-primary text-background font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
         >
           Analyze

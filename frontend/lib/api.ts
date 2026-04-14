@@ -81,6 +81,50 @@ export async function createRun(formData: FormData, token: string): Promise<RunC
   return fetchApi<RunCreated>("/api/runs", { method: "POST", body: formData }, token);
 }
 
+/**
+ * Create a run with XHR so upload byte progress is available.
+ * onUploadProgress is called with 0–100 as bytes are sent.
+ */
+export function createRunWithProgress(
+  formData: FormData,
+  token: string,
+  onUploadProgress: (pct: number) => void,
+): Promise<RunCreated> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}/api/runs`);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable) {
+        onUploadProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as RunCreated);
+        } catch {
+          reject(new Error("Invalid response from server"));
+        }
+      } else {
+        try {
+          const body = JSON.parse(xhr.responseText) as { detail?: string };
+          reject(new Error(body.detail || `HTTP ${xhr.status}`));
+        } catch {
+          reject(new Error(`HTTP ${xhr.status}`));
+        }
+      }
+    });
+
+    xhr.addEventListener("error", () => reject(new Error("Upload failed")));
+    xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
+
+    xhr.send(formData);
+  });
+}
+
 /** Poll run status. Public — no auth required. */
 export async function getRunStatus(id: string): Promise<RunStatus> {
   return fetchApi<RunStatus>(`/api/runs/${id}/status`);
