@@ -131,7 +131,7 @@ export default function HomePage() {
           <div
             className="relative rounded-2xl overflow-hidden"
             style={{
-              backgroundImage: "url(/images/annotated-run.jpeg)",
+              backgroundImage: "url(/images/athlete-running.jpg)",
               backgroundSize: "cover",
               backgroundPosition: "center",
               minHeight: "520px",
