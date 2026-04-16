@@ -51,14 +51,13 @@ export default function AboutPage() {
             <h2 className="text-2xl font-bold text-white mb-4">What is Runlens?</h2>
             <p className="text-gray-300 leading-relaxed">
               Upload a short video from the side, and you get back clear metrics and visual
-              feedback — cadence, vertical bounce, knee angle, and more. I built it because I
-              wanted a quick, honest read on my own gait without the jargon.
+              feedback — cadence, vertical bounce, knee angle, and more. I built it because I wanted to learn how I could improve my form using a lens (get it?) outside of the numbers on my Apple Watch and iPhone.
             </p>
           </div>
           <div
             className="rounded-2xl overflow-hidden h-56 relative"
             style={{
-              backgroundImage: "url(https://picsum.photos/seed/runner-side/800/500)",
+              backgroundImage: "url(images/annotated-run.jpg)",
               backgroundSize: "cover",
               backgroundPosition: "center",
             }}
@@ -84,11 +83,15 @@ export default function AboutPage() {
           </p>
           <h2 className="text-2xl font-bold text-white mb-4">How the analysis works</h2>
           <p className="text-gray-300 leading-relaxed">
-            We use computer vision to track your joints frame by frame, then measure things like
+            Runlens uses computer vision to track your joints frame by frame, then measures things like
             cadence, vertical bounce, and stride length against research-backed targets. The
             pipeline combines MediaPipe Pose for body tracking with rule-based heuristics tuned
             for running — so you get numbers and flags that are easy to act on.
           </p>
+          <p className="text-gray-300 leading-relaxed">
+            Please be aware that results might vary from what you get on your wearables or fitness trackers; these devices use onboard accelerometers to analyze your motion; Runlens uses computer vision and the accuracy will be affected by things like motion blur, poor lighting and other environmental factors. As such, our results are best used as directional insights and trends, not clinical measurements.
+          </p>
+          <p className="text-gray-300 leading-relaxed">One final note: a running coach told me that if her runners don't have any issues with pain or injury while running, then she doesn't bother to correct their form. Human bodies are all different and they work the way they work, so if that's you, then you might not need Runlens. But, if you're curious about your form, and want some quick insights, then Runlens might be the tool you're looking for. Either way, happy running! 🏃</p>
         </div>
       </section>
 

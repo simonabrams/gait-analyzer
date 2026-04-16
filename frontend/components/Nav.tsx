@@ -67,7 +67,7 @@ export default function Nav() {
           onClick={() => setMenuOpen(false)}
         >
           <ApertureIcon className="w-6 h-6 text-primary shrink-0" />
-          <span className="font-semibold text-base tracking-tight">Runlens</span>
+          <span className="font-semibold text-base tracking-tight">Runlens (Beta)</span>
         </Link>
 
         {/* Center nav links */}
