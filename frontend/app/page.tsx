@@ -126,44 +126,68 @@ export default function HomePage() {
             The Process
           </p>
           <h2 className="text-3xl font-bold text-white mb-12 text-center">How it works</h2>
-          <div className="grid md:grid-cols-3 gap-5">
-            {[
-              {
-                seed: "athlete-running",
-                icon: "🎥",
-                title: "Film your run",
-                desc: "30–60 seconds from the side, on a treadmill. Your phone works great.",
-              },
-              {
-                seed: "smartphone-upload",
-                icon: "⬆️",
-                title: "Upload your video",
-                desc: "Drop it in and tell us your height. That's all we need.",
-              },
-              {
-                seed: "data-analytics",
-                icon: "📊",
-                title: "Get your analysis",
-                desc: "See your cadence, stride, posture — and what to work on next.",
-              },
-            ].map(({ seed, icon, title, desc }) => (
-              <div
-                key={seed}
-                className="rounded-2xl overflow-hidden relative h-64"
-                style={{
-                  backgroundImage: `url(https://picsum.photos/seed/${seed}/600/400)`,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
-                }}
-              >
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
-                <div className="absolute inset-0 p-6 flex flex-col justify-end">
-                  <span className="text-2xl mb-2">{icon}</span>
-                  <h3 className="font-semibold text-white text-lg mb-1">{title}</h3>
-                  <p className="text-gray-300 text-sm leading-relaxed">{desc}</p>
+
+          {/* Single image with overlaid step cards */}
+          <div
+            className="relative rounded-2xl overflow-hidden"
+            style={{
+              backgroundImage: "url(/images/annotated-run.jpeg)",
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              minHeight: "520px",
+            }}
+          >
+            <div className="absolute inset-0 bg-black/45" />
+
+            <div className="relative z-10 p-8 md:p-12 flex flex-col justify-between h-full" style={{ minHeight: "520px" }}>
+              {/* Step 1 — left */}
+              <div className="flex items-center gap-0 self-start max-w-[55%]">
+                <div className="flex-shrink-0">
+                  <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-background font-bold text-sm">
+                    1
+                  </div>
+                </div>
+                <div className="h-px bg-primary/60 w-16 md:w-24 flex-shrink-0" />
+                <div className="bg-black/70 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                  <h3 className="font-semibold text-white text-base mb-1">Film your run</h3>
+                  <p className="text-gray-300 text-sm leading-relaxed">
+                    30–60 sec from the side, on a treadmill. Your phone works great.
+                  </p>
                 </div>
               </div>
-            ))}
+
+              {/* Step 2 — right */}
+              <div className="flex items-center gap-0 self-end max-w-[55%]">
+                <div className="bg-black/70 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                  <h3 className="font-semibold text-white text-base mb-1">Upload your video</h3>
+                  <p className="text-gray-300 text-sm leading-relaxed">
+                    Drop it in and tell us your height. That&apos;s all we need.
+                  </p>
+                </div>
+                <div className="h-px bg-primary/60 w-16 md:w-24 flex-shrink-0" />
+                <div className="flex-shrink-0">
+                  <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-background font-bold text-sm">
+                    2
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 3 — left */}
+              <div className="flex items-center gap-0 self-start max-w-[55%]">
+                <div className="flex-shrink-0">
+                  <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-background font-bold text-sm">
+                    3
+                  </div>
+                </div>
+                <div className="h-px bg-primary/60 w-16 md:w-24 flex-shrink-0" />
+                <div className="bg-black/70 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                  <h3 className="font-semibold text-white text-base mb-1">Get your analysis</h3>
+                  <p className="text-gray-300 text-sm leading-relaxed">
+                    See cadence, stride, posture — and what to work on next.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
