@@ -1,3 +1,5 @@
+import MetricTooltip from "@/components/MetricTooltip";
+
 interface MetricCardsProps {
   summary: Record<string, unknown> | undefined;
 }
@@ -7,6 +9,9 @@ const CONFIG = [
     label: "CADENCE",
     key: "cadence_avg",
     unit: "SPM",
+    tooltip:
+      "Measured by detecting stride cycles in your video. Accurate to ±2–3% under good filming conditions. Best validated metric in video-based analysis.",
+    disclaimer: null,
     good: (v: number) => v >= 170,
     score: (v: number) => Math.min(Math.round((v / 170) * 100), 100),
     blurb: (v: number) =>
@@ -22,6 +27,9 @@ const CONFIG = [
     label: "VERTICAL OSCILLATION",
     key: "vertical_osc_avg_cm",
     unit: "cm",
+    tooltip:
+      "Estimated from vertical movement of torso landmarks. Compare this session-to-session rather than against your watch — wrist accelerometers and video use different measurement methods.",
+    disclaimer: "Best compared session-to-session, not against wearables",
     good: (v: number) => v <= 10,
     score: (v: number) => (v <= 0 ? 0 : Math.min(Math.round((10 / v) * 100), 100)),
     blurb: (v: number) =>
@@ -37,6 +45,9 @@ const CONFIG = [
     label: "KNEE ANGLE",
     key: "knee_angle_strike_avg_deg",
     unit: "°",
+    tooltip:
+      "Joint angles from a single camera view are reliable within ~10% vs. lab-grade motion capture under optimal conditions. Accuracy drops with non-ideal camera angles.",
+    disclaimer: "±~10% vs. lab-grade motion capture",
     good: (v: number) => v >= 15,
     score: (v: number) => Math.min(Math.round((v / 15) * 100), 100),
     blurb: (v: number) =>
@@ -107,7 +118,7 @@ export default function MetricCards({ summary }: MetricCardsProps) {
   if (!summary) return null;
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      {CONFIG.map(({ label, key, unit, good, score, blurb }) => {
+      {CONFIG.map(({ label, key, unit, tooltip, disclaimer, good, score, blurb }) => {
         const raw = summary[key];
         const numVal = raw != null ? Number(raw) : null;
         const isGood = numVal != null ? good(numVal) : false;
@@ -120,10 +131,18 @@ export default function MetricCards({ summary }: MetricCardsProps) {
             key={key}
             className="bg-secondary border border-white/10 rounded-xl p-5 flex flex-col items-center gap-3"
           >
-            <p className="text-xs font-semibold tracking-widest text-primary uppercase">{label}</p>
+            <div className="flex items-center">
+              <p className="text-xs font-semibold tracking-widest text-primary uppercase">
+                {label}
+              </p>
+              <MetricTooltip content={tooltip} />
+            </div>
             <ArcRing score={scoreVal} isGood={isGood} value={display} unit={unit} />
             {blurbText && (
               <p className="text-xs text-gray-400 text-center leading-snug">{blurbText}</p>
+            )}
+            {disclaimer && numVal != null && (
+              <p className="text-[10px] text-gray-600 text-center leading-snug">{disclaimer}</p>
             )}
           </div>
         );
