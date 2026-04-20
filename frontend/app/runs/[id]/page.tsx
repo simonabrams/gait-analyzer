@@ -5,6 +5,7 @@ import { getRun } from "@/lib/api";
 import MetricCards from "@/components/MetricCards";
 import FeedbackCards from "@/components/FeedbackCards";
 import ShareButton from "@/components/ShareButton";
+import AccuracyBanner from "@/components/AccuracyBanner";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -136,6 +137,8 @@ export default async function RunResultPage({ params }: Props) {
 
       {hasData ? (
         <>
+          <AccuracyBanner />
+
           {/* Key metrics */}
           <div className="space-y-4">
             <div>
