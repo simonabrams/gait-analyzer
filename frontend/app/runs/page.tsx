@@ -145,7 +145,94 @@ export default function RunsPage() {
           <SectionEyebrow label="All Runs" />
           <h2 className="text-xl font-semibold text-white mt-1">Run Log</h2>
         </div>
-        <div className="border border-white/10 rounded-xl overflow-hidden bg-secondary">
+
+        {/* Mobile card list */}
+        <div className="md:hidden space-y-2">
+          {runs.map((r) => (
+            <div
+              key={r.run_id}
+              className={`border border-white/10 rounded-xl bg-secondary p-4 cursor-pointer hover:bg-white/5 transition-opacity duration-300 ${
+                removingId === r.run_id ? "opacity-0" : ""
+              }`}
+              onClick={() => window.location.assign(`/runs/${r.run_id}`)}
+            >
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-300">{formatDate(r.created_at)}</p>
+                  {r.recorded_at && (
+                    <p className="text-xs text-gray-500 mt-0.5">Recorded {formatDate(r.recorded_at)}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {errorId === r.run_id ? (
+                    <span className="text-red-400 text-xs">Delete failed.</span>
+                  ) : confirmingId === r.run_id ? (
+                    <span className="flex gap-2">
+                      <button
+                        type="button"
+                        className="text-gray-400 hover:text-white text-xs"
+                        onClick={() => setConfirmingId(null)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="text-red-400 hover:text-red-300 text-xs font-medium"
+                        onClick={() => handleDelete(r.run_id)}
+                      >
+                        Delete
+                      </button>
+                    </span>
+                  ) : deletingId === r.run_id ? (
+                    <span className="inline-block w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" aria-hidden />
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-gray-500 hover:text-red-400 p-1 transition-colors"
+                      onClick={() => setConfirmingId(r.run_id)}
+                      aria-label="Delete run"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                <div className="bg-white/5 rounded-lg px-3 py-2">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Cadence</p>
+                  <p className="text-sm font-semibold text-white">{r.cadence_avg != null ? `${r.cadence_avg} spm` : "—"}</p>
+                </div>
+                <div className="bg-white/5 rounded-lg px-3 py-2">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">V. Osc.</p>
+                  <p className="text-sm font-semibold text-white">{r.vertical_osc_avg_cm != null ? `${r.vertical_osc_avg_cm} cm` : "—"}</p>
+                </div>
+                <div className="bg-white/5 rounded-lg px-3 py-2">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Knee°</p>
+                  <p className="text-sm font-semibold text-white">{r.knee_angle_strike_avg_deg != null ? `${r.knee_angle_strike_avg_deg}°` : "—"}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                {r.flags_count === 0 ? (
+                  <span className="text-xs font-medium text-primary">✓ No issues</span>
+                ) : (
+                  <span className="text-xs font-medium text-amber-400">{r.flags_count} issue{r.flags_count !== 1 ? "s" : ""}</span>
+                )}
+                <Link
+                  href={`/runs/${r.run_id}`}
+                  className="text-xs font-medium text-primary hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  View report →
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden md:block border border-white/10 rounded-xl overflow-hidden bg-secondary">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/10">
@@ -252,6 +339,31 @@ export default function RunsPage() {
             </div>
           )}
         </div>
+
+        {/* Mobile pagination */}
+        {total > PAGE_SIZE && (
+          <div className="md:hidden flex items-center justify-between text-sm text-gray-400">
+            <span>{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={page === 0}
+                onClick={() => setPage((p) => p - 1)}
+                className="px-3 py-1 rounded-lg border border-white/10 disabled:opacity-40 hover:bg-white/5 transition-colors"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                disabled={(page + 1) * PAGE_SIZE >= total}
+                onClick={() => setPage((p) => p + 1)}
+                className="px-3 py-1 rounded-lg border border-white/10 disabled:opacity-40 hover:bg-white/5 transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
     </div>
