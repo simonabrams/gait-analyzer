@@ -127,9 +127,28 @@ export default function HomePage() {
           </p>
           <h2 className="text-3xl font-bold text-white mb-12 text-center">How it works</h2>
 
-          {/* Single image with overlaid step cards */}
+          {/* Mobile: vertical step list */}
+          <div className="md:hidden space-y-4">
+            {[
+              { n: 1, title: "Film your run", body: "30–60 sec from the side, on a treadmill. Your phone works great." },
+              { n: 2, title: "Upload your video", body: "Drop it in and tell us your height. That's all we need." },
+              { n: 3, title: "Get your analysis", body: "See cadence, stride, posture — and what to work on next." },
+            ].map(({ n, title, body }) => (
+              <div key={n} className="flex gap-4 items-start bg-secondary rounded-xl p-5 border border-white/10">
+                <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-background font-bold text-sm shrink-0 mt-0.5">
+                  {n}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white text-base mb-1">{title}</h3>
+                  <p className="text-gray-300 text-sm leading-relaxed">{body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: image with overlaid zigzag step cards */}
           <div
-            className="relative rounded-2xl overflow-hidden"
+            className="hidden md:block relative rounded-2xl overflow-hidden"
             style={{
               backgroundImage: "url(/images/athlete-running.jpg)",
               backgroundSize: "cover",
@@ -139,7 +158,7 @@ export default function HomePage() {
           >
             <div className="absolute inset-0 bg-black/45" />
 
-            <div className="relative z-10 p-8 md:p-12 flex flex-col justify-between h-full" style={{ minHeight: "520px" }}>
+            <div className="relative z-10 p-12 flex flex-col justify-between h-full" style={{ minHeight: "520px" }}>
               {/* Step 1 — left */}
               <div className="flex items-center gap-0 self-start max-w-[55%]">
                 <div className="flex-shrink-0">
@@ -147,7 +166,7 @@ export default function HomePage() {
                     1
                   </div>
                 </div>
-                <div className="h-px bg-primary/60 w-16 md:w-24 flex-shrink-0" />
+                <div className="h-px bg-primary/60 w-24 flex-shrink-0" />
                 <div className="bg-black/70 backdrop-blur-sm rounded-xl p-4 border border-white/10">
                   <h3 className="font-semibold text-white text-base mb-1">Film your run</h3>
                   <p className="text-gray-300 text-sm leading-relaxed">
@@ -164,7 +183,7 @@ export default function HomePage() {
                     Drop it in and tell us your height. That&apos;s all we need.
                   </p>
                 </div>
-                <div className="h-px bg-primary/60 w-16 md:w-24 flex-shrink-0" />
+                <div className="h-px bg-primary/60 w-24 flex-shrink-0" />
                 <div className="flex-shrink-0">
                   <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-background font-bold text-sm">
                     2
@@ -179,7 +198,7 @@ export default function HomePage() {
                     3
                   </div>
                 </div>
-                <div className="h-px bg-primary/60 w-16 md:w-24 flex-shrink-0" />
+                <div className="h-px bg-primary/60 w-24 flex-shrink-0" />
                 <div className="bg-black/70 backdrop-blur-sm rounded-xl p-4 border border-white/10">
                   <h3 className="font-semibold text-white text-base mb-1">Get your analysis</h3>
                   <p className="text-gray-300 text-sm leading-relaxed">
