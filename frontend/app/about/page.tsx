@@ -95,6 +95,63 @@ export default function AboutPage() {
         </div>
       </section>
 
+      {/* Tips */}
+      <section className="py-20 bg-secondary">
+        <div className="max-w-3xl mx-auto px-6">
+          <p className="text-primary text-xs font-semibold tracking-[0.2em] uppercase mb-3">
+            Best Results
+          </p>
+          <h2 className="text-2xl font-bold text-white mb-2">Tips for accurate analysis</h2>
+          <p className="text-gray-400 text-sm mb-10">
+            Computer vision is sensitive to how the video is recorded. These tips make a big difference.
+          </p>
+          <div className="grid sm:grid-cols-2 gap-4">
+            {[
+              {
+                title: "Shoot from the side",
+                body: "Place your camera at a strict 90° angle to your direction of travel. Even a slight diagonal angle throws off joint angle and stride calculations.",
+              },
+              {
+                title: "Use 60 fps or higher",
+                body: "Higher frame rates reduce motion blur and give the pose tracker more frames to work with. 30 fps is the minimum; 60 fps or 120 fps produces noticeably better results.",
+              },
+              {
+                title: "Keep the camera level and still",
+                body: "Mount it on a tripod or prop it against something stable. A shaky or panning camera makes landmark tracking unreliable.",
+              },
+              {
+                title: "Frame your whole body",
+                body: "Leave a little headroom above and show your feet clearly. Cropping out your head or feet causes the pose model to guess those joints, reducing accuracy.",
+              },
+              {
+                title: "Film in good, even light",
+                body: "Outdoor daylight is ideal. Avoid filming with the sun or a bright window directly behind you — backlighting washes out your silhouette and hurts detection.",
+              },
+              {
+                title: "Wear fitted clothing",
+                body: "Loose or baggy clothes obscure joint positions. Fitted running kit gives the pose model a much clearer view of your hips, knees, and ankles.",
+              },
+              {
+                title: "Keep clips short",
+                body: "10–30 seconds (covering several full stride cycles) is the sweet spot. Longer clips take more time to process and don't meaningfully improve the results.",
+              },
+              {
+                title: "Simple backgrounds help",
+                body: "A plain wall, road, or open field behind you makes it easier to isolate your body. Busy or high-contrast backgrounds (crowds, fences, foliage) can confuse the tracker.",
+              },
+            ].map((tip) => (
+              <div
+                key={tip.title}
+                className="rounded-xl border border-white/10 bg-background p-5"
+              >
+                <p className="text-white font-semibold mb-1 text-sm">{tip.title}</p>
+                <p className="text-gray-400 text-sm leading-relaxed">{tip.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Metrics */}
       <section className="py-20 bg-background">
         <div className="max-w-3xl mx-auto px-6">
