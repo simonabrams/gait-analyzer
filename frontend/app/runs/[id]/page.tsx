@@ -148,17 +148,6 @@ export default async function RunResultPage({ params }: Props) {
             <MetricCards summary={summary} />
           </div>
 
-          {/* Dashboard image */}
-          {run.dashboard_image_url && (
-            <div className="bg-secondary border border-white/10 rounded-xl overflow-hidden">
-              <img
-                src={run.dashboard_image_url}
-                alt="Run dashboard"
-                className="w-full h-auto"
-              />
-            </div>
-          )}
-
           {/* Form breakdown / feedback */}
           <div className="space-y-4">
             <div>
@@ -167,6 +156,23 @@ export default async function RunResultPage({ params }: Props) {
             </div>
             <FeedbackCards flags={flags} hasData={true} />
           </div>
+
+          {/* Dashboard image */}
+          {run.dashboard_image_url && (
+            <div className="space-y-4">
+              <div>
+                <SectionEyebrow label="Stride Charts" />
+                <h2 className="text-xl font-semibold text-white mt-1">Metrics Over Time</h2>
+              </div>
+              <div className="bg-secondary border border-white/10 rounded-xl overflow-hidden">
+                <img
+                  src={run.dashboard_image_url}
+                  alt="Run dashboard"
+                  className="w-full h-auto"
+                />
+              </div>
+            </div>
+          )}
         </>
       ) : (
         /* No data — explain why and what to try */
