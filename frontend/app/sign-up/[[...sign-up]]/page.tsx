@@ -1,9 +1,9 @@
-import { Waitlist } from "@clerk/nextjs";
+import { SignUp } from "@clerk/nextjs";
 
 export default function SignUpPage() {
   return (
     <div className="flex justify-center py-16">
-      <Waitlist />
+      <SignUp />
     </div>
   );
 }
