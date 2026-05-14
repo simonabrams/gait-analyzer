@@ -1,8 +1,18 @@
-"use client";
-
-import { useState } from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import Footer from "@/components/Footer";
+import TechAccordion from "@/components/TechAccordion";
+
+export const metadata: Metadata = {
+  title: "About",
+  description:
+    "Learn how Runlens uses computer vision to analyze your running form — cadence, vertical oscillation, knee angle, and more. No wearables or lab required.",
+  openGraph: {
+    title: "About — Runlens",
+    description:
+      "Learn how Runlens uses computer vision to analyze your running form — cadence, vertical oscillation, knee angle, and more. No wearables or lab required.",
+  },
+};
 
 const METRICS = [
   { metric: "Cadence", target: "170–180 spm", meaning: "Steps per minute" },
@@ -13,8 +23,6 @@ const METRICS = [
 ];
 
 export default function AboutPage() {
-  const [techOpen, setTechOpen] = useState(false);
-
   return (
     <div>
       {/* Hero */}
@@ -91,7 +99,7 @@ export default function AboutPage() {
           <p className="text-gray-300 leading-relaxed">
             Please be aware that results might vary from what you get on your wearables or fitness trackers; these devices use onboard accelerometers to analyze your motion; Runlens uses computer vision and the accuracy will be affected by things like motion blur, poor lighting and other environmental factors. As such, our results are best used as directional insights and trends, not clinical measurements.
           </p>
-          <p className="text-gray-300 leading-relaxed">One final note: a running coach told me that if her runners don't have any issues with pain or injury while running, then she doesn't bother to correct their form. Human bodies are all different and they work the way they work, so if that's you, then you might not need Runlens. But, if you're curious about your form, and want some quick insights, then Runlens might be the tool you're looking for. Either way, happy running! 🏃</p>
+          <p className="text-gray-300 leading-relaxed">One final note: a running coach told me that if her runners don&apos;t have any issues with pain or injury while running, then she doesn&apos;t bother to correct their form. Human bodies are all different and they work the way they work, so if that&apos;s you, then you might not need Runlens. But, if you&apos;re curious about your form, and want some quick insights, then Runlens might be the tool you&apos;re looking for. Either way, happy running! 🏃</p>
         </div>
       </section>
 
@@ -200,21 +208,7 @@ export default function AboutPage() {
             </p>
           </div>
 
-          <div>
-            <button
-              type="button"
-              onClick={() => setTechOpen((o) => !o)}
-              className="flex items-center gap-2 text-primary hover:opacity-80 font-medium transition-opacity"
-            >
-              <span className="text-xs">{techOpen ? "▼" : "▶"}</span> Tech stack
-            </button>
-            {techOpen && (
-              <p className="mt-3 text-gray-400 text-sm leading-relaxed">
-                Runlens is built with Next.js, FastAPI, MediaPipe, and Cloudflare R2. It runs on
-                Render and Vercel.
-              </p>
-            )}
-          </div>
+          <TechAccordion />
         </div>
       </section>
 
