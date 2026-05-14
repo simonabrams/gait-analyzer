@@ -5,8 +5,6 @@ Generate a matplotlib multi-panel dashboard from the results dict.
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
-
 # Site design tokens
 BG_DARK = "#0F0F0F"
 BG_PANEL = "#1A1A1A"
@@ -33,7 +31,6 @@ def _style_ax(ax, title, xlabel, ylabel):
 
 def create_dashboard(results):
     strides = results.get("strides", [])
-    summary = results.get("summary", {})
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 9))
     fig.patch.set_facecolor(BG_DARK)
