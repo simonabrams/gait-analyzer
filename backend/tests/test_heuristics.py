@@ -126,20 +126,67 @@ def test_trunk_lean_does_not_trigger_when_no_trunk_data():
     assert len(tl) == 0
 
 
-# ---- Combined ----
+# ---- Combined / conflict resolution ----
+def test_cadence_and_overstriding_merge_into_single_flag():
+    """When both cadence and overstriding fire they share a root cause and should merge."""
+    summary = {"cadence_avg": 165.0}
+    strides = [{"foot_strike_position_cm": 14.0}]
+    flags = evaluate_heuristics(_results(summary=summary, strides=strides))
+    metrics = {f["metric"] for f in flags}
+    assert "stride_and_cadence" in metrics
+    assert "cadence" not in metrics
+    assert "overstriding" not in metrics
+    merged = next(f for f in flags if f["metric"] == "stride_and_cadence")
+    assert merged["value"] == 165.0  # cadence value preserved
+    assert "173" in merged["exercises"][0]["name"]  # 165 * 1.05 = 173 spm target
+
+
+def test_cadence_alone_not_merged():
+    summary = {"cadence_avg": 165.0}
+    flags = evaluate_heuristics(_results(summary=summary, strides=[{}]))
+    metrics = {f["metric"] for f in flags}
+    assert "cadence" in metrics
+    assert "stride_and_cadence" not in metrics
+
+
+def test_overstriding_alone_not_merged():
+    strides = [{"foot_strike_position_cm": 14.0}]
+    flags = evaluate_heuristics(_results(summary={}, strides=strides))
+    metrics = {f["metric"] for f in flags}
+    assert "overstriding" in metrics
+    assert "stride_and_cadence" not in metrics
+
+
 def test_multiple_flags_can_trigger():
     summary = {"cadence_avg": 165.0, "vertical_osc_avg_cm": 11.0}
     strides = [
         {"knee_angle_strike_deg": 10.0, "foot_strike_position_cm": 12.0, "trunk_lean_deg": 16.0},
     ]
     flags = evaluate_heuristics(_results(summary=summary, strides=strides))
-    assert len(flags) >= 4
     metrics = {f["metric"] for f in flags}
-    assert "cadence" in metrics
+    # cadence+overstriding merge into stride_and_cadence
+    assert "stride_and_cadence" in metrics
     assert "vertical_oscillation" in metrics
     assert "knee_flexion_at_strike" in metrics
-    assert "overstriding" in metrics
     assert "trunk_lean" in metrics
+
+
+def test_severity_field_present_on_flags():
+    summary = {"cadence_avg": 155.0}  # below severe threshold of 160
+    flags = evaluate_heuristics(_results(summary=summary, strides=[{}]))
+    cad = next((f for f in flags if f.get("metric") == "cadence"), None)
+    assert cad is not None
+    assert cad["severity"] == "severe"
+
+
+def test_measured_value_in_drill_description():
+    """Drill descriptions should reference the runner's actual measured value."""
+    summary = {"cadence_avg": 163.0}
+    flags = evaluate_heuristics(_results(summary=summary, strides=[{}]))
+    cad = next(f for f in flags if f["metric"] == "cadence")
+    # 163 * 1.05 = 171.15 → rounded to 171
+    assert "163" in cad["exercises"][0]["description"]
+    assert "171" in cad["exercises"][0]["name"]
 
 
 def test_no_flags_when_all_within_range():
