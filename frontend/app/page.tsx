@@ -6,11 +6,11 @@ export const metadata: Metadata = {
     absolute: "Runlens — AI-Powered Running Gait Analysis",
   },
   description:
-    "Upload a short side-view running video and get instant AI feedback on your cadence, vertical oscillation, knee angle, and overall running form. Free to try.",
+    "Upload a short side-view running video and get instant AI feedback on your cadence, bounce, knee drive, and overall running form. Free to try.",
   openGraph: {
     title: "Runlens — AI-Powered Running Gait Analysis",
     description:
-      "Upload a short side-view running video and get instant AI feedback on your cadence, vertical oscillation, knee angle, and overall running form.",
+      "Upload a short side-view running video and get instant AI feedback on your cadence, bounce, knee drive, and overall running form.",
   },
 };
 

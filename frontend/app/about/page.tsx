@@ -6,18 +6,18 @@ import TechAccordion from "@/components/TechAccordion";
 export const metadata: Metadata = {
   title: "About",
   description:
-    "Learn how Runlens uses computer vision to analyze your running form — cadence, vertical oscillation, knee angle, and more. No wearables or lab required.",
+    "Learn how Runlens uses computer vision to analyze your running form — cadence, bounce, knee drive, and more. No wearables or lab required.",
   openGraph: {
     title: "About — Runlens",
     description:
-      "Learn how Runlens uses computer vision to analyze your running form — cadence, vertical oscillation, knee angle, and more. No wearables or lab required.",
+      "Learn how Runlens uses computer vision to analyze your running form — cadence, bounce, knee drive, and more. No wearables or lab required.",
   },
 };
 
 const METRICS = [
   { metric: "Cadence", target: "170–180 spm", meaning: "Steps per minute" },
-  { metric: "Vertical oscill.", target: "< 10 cm", meaning: "How much you bounce" },
-  { metric: "Knee flexion", target: "> 15°", meaning: "Shock absorption at impact" },
+  { metric: "Bounce", target: "< 10 cm", meaning: "Up-and-down movement while running" },
+  { metric: "Knee Drive", target: "> 15°", meaning: "Shock absorption at impact" },
   { metric: "Trunk lean", target: "< 15°", meaning: "Forward body angle" },
   { metric: "Overstriding", target: "< 10 cm ahead", meaning: "Foot landing vs. hips" },
 ];
@@ -59,7 +59,7 @@ export default function AboutPage() {
             <h2 className="text-2xl font-bold text-white mb-4">What is Runlens?</h2>
             <p className="text-gray-300 leading-relaxed">
               Upload a short video from the side, and you get back clear metrics and visual
-              feedback — cadence, vertical bounce, knee angle, and more. I built it because I wanted to learn how I could improve my form using a lens (get it?) outside of the numbers on my Apple Watch and iPhone.
+              feedback — cadence, bounce, knee drive, and more. I built it because I wanted to learn how I could improve my form using a lens (get it?) outside of the numbers on my Apple Watch and iPhone.
             </p>
           </div>
           <div

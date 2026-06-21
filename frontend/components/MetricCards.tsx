@@ -24,7 +24,7 @@ const CONFIG = [
         : "Well below target — aim for 170+ SPM",
   },
   {
-    label: "VERTICAL OSCILLATION",
+    label: "BOUNCE",
     key: "vertical_osc_avg_cm",
     unit: "cm",
     tooltip:
@@ -36,13 +36,13 @@ const CONFIG = [
       v <= 6
         ? "Excellent — minimal energy wasted"
         : v <= 10
-        ? "Good — efficient vertical movement"
+        ? "Good — efficient, low bounce"
         : v <= 12
         ? "Slightly high — aim for under 10 cm"
-        : "High bounce — reduce vertical movement",
+        : "High bounce — too much up-and-down movement",
   },
   {
-    label: "KNEE ANGLE",
+    label: "KNEE DRIVE",
     key: "knee_angle_strike_avg_deg",
     unit: "°",
     tooltip:
@@ -54,10 +54,10 @@ const CONFIG = [
       v >= 20
         ? "Excellent — strong knee drive at strike"
         : v >= 15
-        ? "Good — solid knee angle at foot strike"
+        ? "Good — solid knee drive at foot strike"
         : v >= 10
         ? "Below ideal — aim for 15°+"
-        : "Low strike angle — focus on knee drive",
+        : "Low knee drive — leg landing too straight",
   },
 ];
 

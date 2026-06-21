@@ -53,7 +53,7 @@ def create_dashboard(results):
 
     # ── Vertical oscillation ─────────────────────────────────────────────────
     ax2 = axes[0, 1]
-    _style_ax(ax2, "Vertical Oscillation", "Stride", "cm")
+    _style_ax(ax2, "Bounce", "Stride", "cm")
     if strides:
         oscs = [s["vertical_osc_cm"] for s in strides]
         ax2.plot(xs, oscs, color=COLOR_PRIMARY, linewidth=1.8, marker="o",
@@ -66,7 +66,7 @@ def create_dashboard(results):
 
     # ── Knee flexion ─────────────────────────────────────────────────────────
     ax3 = axes[1, 0]
-    _style_ax(ax3, "Knee Flexion at Foot Strike", "Stride", "degrees")
+    _style_ax(ax3, "Knee Drive at Foot Strike", "Stride", "degrees")
     if strides:
         knees = [s.get("knee_angle_strike_deg") or 0 for s in strides]
         bar_colors = [COLOR_WARN if (k and k < 15) else COLOR_PRIMARY for k in knees]

@@ -23,9 +23,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     [
       summary.cadence_avg != null && `Cadence: ${summary.cadence_avg} spm`,
       summary.vertical_osc_avg_cm != null &&
-        `Vertical oscillation: ${summary.vertical_osc_avg_cm} cm`,
+        `Bounce: ${summary.vertical_osc_avg_cm} cm`,
       summary.knee_angle_strike_avg_deg != null &&
-        `Knee angle: ${summary.knee_angle_strike_avg_deg}°`,
+        `Knee drive: ${summary.knee_angle_strike_avg_deg}°`,
     ]
       .filter(Boolean)
       .join(" · ");
@@ -106,7 +106,7 @@ export default async function RunResultPage({ params }: Props) {
           )}
         </div>
         <div className="flex items-center gap-2 pt-1">
-          <ShareButton />
+          <ShareButton runId={id} />
           <Link
             href="/runs"
             className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors"
