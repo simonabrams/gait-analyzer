@@ -97,7 +97,7 @@ export default function ProgressCharts({ runs }: ProgressChartsProps) {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard eyebrow="Progress" title="Vertical oscillation over time">
+      <ChartCard eyebrow="Progress" title="Bounce over time">
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
@@ -126,7 +126,7 @@ export default function ProgressCharts({ runs }: ProgressChartsProps) {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard eyebrow="Progress" title="Knee angle at foot strike over time">
+      <ChartCard eyebrow="Progress" title="Knee drive over time">
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />

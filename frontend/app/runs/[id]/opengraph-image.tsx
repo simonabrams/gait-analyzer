@@ -75,12 +75,12 @@ export default async function Image({ params }: { params: { id: string } }) {
       good: cadenceVal != null ? cadenceVal >= 170 : null,
     },
     {
-      label: "V. Oscillation",
+      label: "Bounce",
       value: vertOscVal != null ? `${vertOscVal} cm` : "—",
       good: vertOscVal != null ? vertOscVal <= 10 : null,
     },
     {
-      label: "Knee Angle",
+      label: "Knee Drive",
       value: kneeVal != null ? `${kneeVal}°` : "—",
       good: kneeVal != null ? kneeVal >= 15 : null,
     },

@@ -204,11 +204,11 @@ export default function RunsPage() {
                   <p className="text-sm font-semibold text-white">{r.cadence_avg != null ? `${r.cadence_avg} spm` : "—"}</p>
                 </div>
                 <div className="bg-white/5 rounded-lg px-3 py-2">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">V. Osc.</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Bounce</p>
                   <p className="text-sm font-semibold text-white">{r.vertical_osc_avg_cm != null ? `${r.vertical_osc_avg_cm} cm` : "—"}</p>
                 </div>
                 <div className="bg-white/5 rounded-lg px-3 py-2">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Knee°</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Knee</p>
                   <p className="text-sm font-semibold text-white">{r.knee_angle_strike_avg_deg != null ? `${r.knee_angle_strike_avg_deg}°` : "—"}</p>
                 </div>
               </div>
@@ -239,8 +239,8 @@ export default function RunsPage() {
                 <th className="text-left px-4 py-3 text-xs font-semibold tracking-wider text-gray-400 uppercase">Uploaded</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold tracking-wider text-gray-400 uppercase">Recorded</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold tracking-wider text-gray-400 uppercase">Cadence</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold tracking-wider text-gray-400 uppercase">V. Osc.</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold tracking-wider text-gray-400 uppercase">Knee°</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold tracking-wider text-gray-400 uppercase">Bounce</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold tracking-wider text-gray-400 uppercase">Knee</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold tracking-wider text-gray-400 uppercase">Issues</th>
                 <th className="text-left px-4 py-3" />
                 <th className="text-left px-4 py-3 w-24" aria-label="Delete" />

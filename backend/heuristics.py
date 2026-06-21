@@ -195,13 +195,13 @@ def _check_vertical_osc(summary, strides, flags):
 
     if severity == "severe":
         recommendation = (
-            f"Vertical oscillation is high at {avg:.1f} cm — {excess:.1f} cm above the "
-            f"{VERTICAL_OSC_MAX_CM} cm target. This much up-and-down bounce is a significant "
+            f"Your bounce is high at {avg:.1f} cm — {excess:.1f} cm above the "
+            f"{VERTICAL_OSC_MAX_CM} cm target. This much up-and-down movement is a significant "
             f"energy leak. Focus on driving forward, not upward."
         )
     else:
         recommendation = (
-            f"Vertical oscillation is slightly elevated at {avg:.1f} cm "
+            f"Your bounce is slightly elevated at {avg:.1f} cm "
             f"(target: ≤{VERTICAL_OSC_MAX_CM} cm). "
             f"A more compact stride and quicker cadence will reduce wasted bounce."
         )
@@ -254,13 +254,13 @@ def _check_knee_flexion(strides, flags):
 
     if severity == "severe":
         recommendation = (
-            f"Knee flexion at foot strike is very low ({avg:.1f}°) — you're landing with "
+            f"Your knee drive at landing is very low ({avg:.1f}°) — you're landing with "
             f"nearly a straight leg, {deficit:.0f}° short of the {KNEE_FLEXION_MIN_DEG}° target. "
             f"This transmits impact directly through the knee and hip with little absorption."
         )
     else:
         recommendation = (
-            f"Knee flexion at foot strike is low ({avg:.1f}°). "
+            f"Your knee drive at landing is low ({avg:.1f}°). "
             f"Aim for a slight bend of at least {KNEE_FLEXION_MIN_DEG}° at landing "
             f"to absorb impact and protect the knee."
         )

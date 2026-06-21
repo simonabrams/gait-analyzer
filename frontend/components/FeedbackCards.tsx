@@ -35,7 +35,18 @@ function computeScore(value: unknown, threshold: unknown): number {
   return 100;
 }
 
+const FRIENDLY_LABELS: Record<string, string> = {
+  cadence: "Cadence",
+  vertical_oscillation: "Bounce",
+  knee_flexion_at_strike: "Knee Drive",
+  overstriding: "Overstriding",
+  trunk_lean: "Posture",
+  stride_and_cadence: "Stride & Cadence",
+  cadence_confidence: "Cadence Confidence",
+};
+
 function humanLabel(metric: string): string {
+  if (FRIENDLY_LABELS[metric]) return FRIENDLY_LABELS[metric];
   return metric
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
