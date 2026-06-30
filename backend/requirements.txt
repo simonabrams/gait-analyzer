@@ -31,6 +31,9 @@ slowapi>=0.1.9
 # Error monitoring
 sentry-sdk[fastapi,celery]>=2.0.0
 
+# Analytics
+posthog>=3.0.0
+
 # Presigned URL caching
 cachetools>=5.3.0
 

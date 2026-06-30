@@ -1,6 +1,7 @@
 """
 FastAPI app: runs API, health, CORS.
 """
+import atexit
 import logging
 import os
 import tempfile
@@ -12,6 +13,7 @@ import jwt
 import redis as redis_lib
 import sentry_sdk
 from cachetools import TTLCache
+from posthog import Posthog
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -55,6 +57,21 @@ SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
 if SENTRY_DSN:
     sentry_sdk.init(dsn=SENTRY_DSN)
     logger.info("Sentry initialised")
+
+# ---------------------------------------------------------------------------
+# PostHog
+# ---------------------------------------------------------------------------
+_POSTHOG_TOKEN = os.environ.get("POSTHOG_PROJECT_TOKEN", "").strip()
+_POSTHOG_HOST = os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com").strip()
+posthog_client: Posthog | None = None
+if _POSTHOG_TOKEN:
+    posthog_client = Posthog(
+        project_api_key=_POSTHOG_TOKEN,
+        host=_POSTHOG_HOST,
+        enable_exception_autocapture=True,
+    )
+    atexit.register(posthog_client.shutdown)
+    logger.info("PostHog initialised")
 
 # ---------------------------------------------------------------------------
 # Presigned URL cache — avoids an R2 round-trip on every page load.
@@ -289,6 +306,12 @@ async def create_run(
             "Job queue unavailable. Is Redis running?",
         ) from e
     logger.info("Run created", extra={"run_id": str(run_id), "height_cm": height_cm, "user_id": user_id})
+    if posthog_client:
+        posthog_client.capture(
+            user_id,
+            "run_created",
+            properties={"height_cm": height_cm, "file_format": suffix},
+        )
     return RunCreatedResponse(run_id=run_id, status="processing")
 
 
@@ -342,6 +365,12 @@ def get_run(
             detail.annotated_video_url = _cached_presigned_url(run.annotated_video_r2_key)
         if run.dashboard_image_r2_key:
             detail.dashboard_image_url = _cached_presigned_url(run.dashboard_image_r2_key)
+    if posthog_client and run.user_id:
+        posthog_client.capture(
+            run.user_id,
+            "run_viewed",
+            properties={"run_status": run.status.value},
+        )
     return detail
 
 
@@ -400,7 +429,14 @@ def delete_run(
                 _presigned_cache.pop(key, None)
     except Exception as e:
         logger.warning("R2/local delete failed for run %s: %s", run_id, e)
+    run_status = run.status.value
     db.delete(run)
     db.commit()
     logger.info("Run deleted", extra={"run_id": str(run_id), "user_id": user_id})
+    if posthog_client:
+        posthog_client.capture(
+            user_id,
+            "run_deleted",
+            properties={"run_status": run_status},
+        )
     return None

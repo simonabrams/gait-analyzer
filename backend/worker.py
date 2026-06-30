@@ -1,6 +1,7 @@
 """
 Celery app and process_video task: download from R2, preprocess, run job_runner, upload outputs, update DB.
 """
+import atexit
 import logging
 import os
 import signal
@@ -12,6 +13,7 @@ from pathlib import Path
 import celery
 import celery.exceptions
 import sentry_sdk
+from posthog import Posthog
 from sentry_sdk.integrations.celery import CeleryIntegration
 
 from backend.database import get_db_session
@@ -32,6 +34,17 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
 if SENTRY_DSN:
     sentry_sdk.init(dsn=SENTRY_DSN, integrations=[CeleryIntegration()])
+
+_POSTHOG_TOKEN = os.environ.get("POSTHOG_PROJECT_TOKEN", "").strip()
+_POSTHOG_HOST = os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com").strip()
+posthog_client: Posthog | None = None
+if _POSTHOG_TOKEN:
+    posthog_client = Posthog(
+        project_api_key=_POSTHOG_TOKEN,
+        host=_POSTHOG_HOST,
+        enable_exception_autocapture=True,
+    )
+    atexit.register(posthog_client.shutdown)
 
 app = celery.Celery(
     "gait_analyzer",
@@ -164,6 +177,18 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
         run.error_message = None
         db.commit()
 
+        if posthog_client and run.user_id:
+            summary = (out["results"] or {}).get("summary") or {}
+            posthog_client.capture(
+                run.user_id,
+                "run_completed",
+                properties={
+                    "height_cm": height_cm,
+                    "cadence_avg": summary.get("cadence_avg"),
+                    "flags_count": len((out["results"] or {}).get("flags") or []),
+                },
+            )
+
         for p in out.get("temp_paths") or []:
             try:
                 os.unlink(p)
@@ -174,12 +199,24 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
         run.error_message = "Analysis timed out (video may be too long or complex). Please try a shorter clip."
         run.progress_pct = 0
         db.commit()
+        if posthog_client and run.user_id:
+            posthog_client.capture(
+                run.user_id,
+                "run_failed",
+                properties={"height_cm": height_cm, "error_type": "timeout"},
+            )
         raise
     except Exception as e:
         run.status = RunStatus.failed
         run.error_message = str(e)
         run.progress_pct = 0
         db.commit()
+        if posthog_client and run.user_id:
+            posthog_client.capture(
+                run.user_id,
+                "run_failed",
+                properties={"height_cm": height_cm, "error_type": type(e).__name__},
+            )
         raise
     finally:
         _current_run_id = None
