@@ -4,6 +4,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import Nav from "@/components/Nav";
+import PostHogProvider from "@/components/PostHogProvider";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://runlens.io"),
@@ -32,12 +33,14 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body className="antialiased min-h-screen bg-background text-gray-100 font-sans">
-          <Nav />
-          <main className="pt-14 min-h-screen">
-            {children}
-          </main>
-          <Analytics />
-          <SpeedInsights />
+          <PostHogProvider>
+            <Nav />
+            <main className="pt-14 min-h-screen">
+              {children}
+            </main>
+            <Analytics />
+            <SpeedInsights />
+          </PostHogProvider>
         </body>
       </html>
     </ClerkProvider>

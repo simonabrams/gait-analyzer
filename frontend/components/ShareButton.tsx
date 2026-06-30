@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import posthog from "posthog-js";
 
 export default function ShareButton({ runId }: { runId: string }) {
   const [copied, setCopied] = useState(false);
@@ -13,6 +14,7 @@ export default function ShareButton({ runId }: { runId: string }) {
       () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+        posthog.capture("share_link_copied");
       },
       () => setCopied(false)
     );
@@ -32,6 +34,7 @@ export default function ShareButton({ runId }: { runId: string }) {
           title: "My Runlens gait report",
           text: "Check out my running gait analysis from Runlens",
         });
+        posthog.capture("share_image_downloaded", { method: "native_share" });
         return;
       }
 
@@ -41,6 +44,7 @@ export default function ShareButton({ runId }: { runId: string }) {
       a.download = "runlens-report.png";
       a.click();
       URL.revokeObjectURL(url);
+      posthog.capture("share_image_downloaded", { method: "download" });
     } catch {
       // Share/download failed silently (e.g. user cancelled the share sheet)
     } finally {

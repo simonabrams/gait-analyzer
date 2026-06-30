@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useAuth, SignInButton } from "@clerk/nextjs";
 import { createRunWithProgress, getRunStatus } from "@/lib/api";
+import posthog from "posthog-js";
 
 function getProcessingStage(pct: number): string {
   if (pct >= 90) return "Writing report…";
@@ -65,6 +66,11 @@ export default function VideoUploader({
     setUploadProgress(0);
     setProcessingProgress(null);
     setStatus("Uploading...");
+    posthog.capture("analysis_submitted", {
+      file_format: file.name.split(".").pop()?.toLowerCase() ?? "unknown",
+      file_size_mb: Math.round((file.size / 1024 / 1024) * 10) / 10,
+      height_cm: height,
+    });
     try {
       const form = new FormData();
       form.append("file", file);
@@ -103,10 +109,15 @@ export default function VideoUploader({
       };
       pollTimeoutRef.current = setTimeout(() => poll(2000), 2000);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
+      const errorMessage = e instanceof Error ? e.message : "Upload failed";
+      setError(errorMessage);
       setUploadProgress(null);
       setProcessingProgress(null);
       setStatus(null);
+      posthog.capture("upload_failed", {
+        error_message_length: errorMessage.length,
+        height_cm: height,
+      });
     }
   };
 
