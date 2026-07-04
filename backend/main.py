@@ -12,11 +12,12 @@ from pathlib import Path
 import jwt
 import redis as redis_lib
 import sentry_sdk
+import stripe
 from cachetools import TTLCache
 from posthog import Posthog
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from jwt import PyJWKClient
 from pythonjsonlogger import jsonlogger
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -25,10 +26,14 @@ from slowapi.util import get_remote_address
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from backend import storage
+from backend import billing, storage
 from backend.database import get_db
-from backend.models import Run, RunStatus
+from backend.models import Run, RunStatus, Subscription, SubscriptionTier
 from backend.schemas import (
+    BillingStatusResponse,
+    CheckoutRequest,
+    CheckoutResponse,
+    PortalResponse,
     RunCreatedResponse,
     RunDetail,
     RunListItem,
@@ -100,6 +105,8 @@ else:
     logger.warning("CLERK_JWKS_URL not set — JWT auth disabled (dev mode)")
 
 _DEV_USER = "dev-user"
+
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 
 
 def _verify_jwt(authorization: str) -> str:
@@ -235,9 +242,35 @@ async def create_run(
     request: Request,
     file: UploadFile = File(...),
     height_cm: int = Form(..., ge=100, le=250),
+    referral_code: str | None = Form(None),
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
+    sub = billing.get_or_create_subscription(db, user_id)
+    if not billing.has_active_access(sub):
+        if sub.tier == SubscriptionTier.pro.value:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "code": "subscription_inactive",
+                    "message": "Your Pro subscription is inactive. Please update your payment method.",
+                },
+            )
+        if sub.free_scans_used >= 1 + sub.bonus_scans:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "code": "free_scan_used",
+                    "message": "You've used your free scan. Upgrade to Pro for unlimited scans.",
+                },
+            )
+
+    if referral_code and not sub.referred_by_code and referral_code != sub.referral_code:
+        is_first_run = db.query(Run).filter(Run.user_id == user_id).count() == 0
+        if is_first_run and db.query(Subscription).filter(Subscription.referral_code == referral_code).first():
+            sub.referred_by_code = referral_code
+            db.commit()
+
     suffix = (file.filename or "").split(".")[-1].lower()
     if suffix not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, "Only MP4 and MOV files are allowed")
@@ -296,6 +329,11 @@ async def create_run(
         db.rollback()
         logger.exception("DB commit failed for run %s: %s", run_id, e)
         raise HTTPException(500, "Database error. Check server logs.") from e
+
+    if sub.tier == SubscriptionTier.free.value:
+        sub.free_scans_used += 1
+        db.commit()
+
     try:
         from backend.worker import process_video
         process_video.delay(str(run_id), raw_key, height_cm)
@@ -375,6 +413,56 @@ def get_run(
 
 
 # ---------------------------------------------------------------------------
+# GET /api/runs/{run_id}/report.pdf — auth + ownership + Pro gated (paid feature,
+# unlike the public detail/share routes above)
+# ---------------------------------------------------------------------------
+@app.get("/api/runs/{run_id}/report.pdf")
+def get_run_report_pdf(
+    run_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    run = _get_run(db, run_id)
+    if not run:
+        raise HTTPException(404, "Run not found")
+    # Return 404 (not 403) so we don't leak that the run exists — same as DELETE
+    if run.user_id != user_id:
+        raise HTTPException(404, "Run not found")
+    if run.status != RunStatus.complete:
+        raise HTTPException(400, "Run is not complete yet")
+
+    sub = billing.get_or_create_subscription(db, user_id)
+    if not billing.has_active_access(sub):
+        raise HTTPException(
+            status_code=402,
+            detail={"code": "pro_required", "message": "PDF report export is a Pro feature."},
+        )
+
+    from backend.pdf_report import build_run_report_pdf
+
+    fd, pdf_path = tempfile.mkstemp(suffix=".pdf")
+    os.close(fd)
+    try:
+        build_run_report_pdf(run, pdf_path)
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
+    finally:
+        try:
+            os.unlink(pdf_path)
+        except OSError:
+            pass
+
+    if posthog_client:
+        posthog_client.capture(user_id, "pdf_report_downloaded", properties={"run_id": str(run_id)})
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="runlens-report-{run_id}.pdf"'},
+    )
+
+
+# ---------------------------------------------------------------------------
 # GET /api/runs — list runs for the authenticated user only
 # ---------------------------------------------------------------------------
 @app.get("/api/runs", response_model=RunListResponse)
@@ -440,3 +528,85 @@ def delete_run(
             properties={"run_status": run_status},
         )
     return None
+
+
+# ---------------------------------------------------------------------------
+# Billing — Stripe Checkout, Customer Portal, status, and webhook
+# ---------------------------------------------------------------------------
+def _billing_status_response(sub: Subscription) -> BillingStatusResponse:
+    return BillingStatusResponse(
+        tier=sub.tier,
+        status=sub.status,
+        is_pro=billing.has_active_access(sub),
+        trial_end=sub.trial_end,
+        current_period_end=sub.current_period_end,
+        cancel_at_period_end=sub.cancel_at_period_end,
+        free_scans_used=sub.free_scans_used,
+        bonus_scans=sub.bonus_scans,
+        referral_code=sub.referral_code,
+        referral_link=f"{FRONTEND_URL}/?ref={sub.referral_code}",
+    )
+
+
+@app.get("/api/billing/status", response_model=BillingStatusResponse)
+def get_billing_status(
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    sub = billing.get_or_create_subscription(db, user_id)
+    return _billing_status_response(sub)
+
+
+@app.post("/api/billing/checkout", response_model=CheckoutResponse)
+def create_checkout(
+    body: CheckoutRequest,
+    email: str | None = Header(default=None, alias="X-User-Email"),
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    sub = billing.get_or_create_subscription(db, user_id)
+    try:
+        session = billing.create_checkout_session(
+            sub,
+            plan=body.plan,
+            email=email,
+            success_url=f"{FRONTEND_URL}/account/billing?checkout=success",
+            cancel_url=f"{FRONTEND_URL}/pricing?checkout=canceled",
+        )
+    except Exception as e:
+        logger.exception("Stripe checkout session creation failed for user %s: %s", user_id, e)
+        raise HTTPException(502, "Could not start checkout. Please try again.") from e
+    return CheckoutResponse(url=session.url)
+
+
+@app.post("/api/billing/portal", response_model=PortalResponse)
+def create_portal(
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    sub = billing.get_or_create_subscription(db, user_id)
+    if not sub.stripe_customer_id:
+        raise HTTPException(404, "No billing account yet — start a Pro checkout first")
+    try:
+        session = billing.create_portal_session(
+            sub.stripe_customer_id,
+            return_url=f"{FRONTEND_URL}/account/billing",
+        )
+    except Exception as e:
+        logger.exception("Stripe portal session creation failed for user %s: %s", user_id, e)
+        raise HTTPException(502, "Could not open billing portal. Please try again.") from e
+    return PortalResponse(url=session.url)
+
+
+@app.post("/api/billing/webhook")
+async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+    try:
+        # .to_dict() up front: StripeObject doesn't support .get(), which billing.py relies on.
+        event = stripe.Webhook.construct_event(payload, sig_header, billing.WEBHOOK_SECRET).to_dict()
+    except (ValueError, stripe.error.SignatureVerificationError) as e:
+        logger.warning("Stripe webhook signature verification failed: %s", e)
+        raise HTTPException(400, "Invalid webhook signature") from e
+    billing.handle_webhook_event(db, event)
+    return {"received": True}

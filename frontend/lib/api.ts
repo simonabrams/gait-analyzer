@@ -53,6 +53,45 @@ export interface RunDetail {
   error_message: string | null;
 }
 
+export interface BillingStatus {
+  tier: string;
+  status: string | null;
+  is_pro: boolean;
+  trial_end: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  free_scans_used: number;
+  free_scans_limit: number;
+  bonus_scans: number;
+  referral_code: string;
+  referral_link: string;
+}
+
+/** Error thrown by fetchApi/createRunWithProgress. `code` is the machine-readable
+ * error code the backend attaches to billing-gate responses (e.g. "free_scan_used"),
+ * so callers can branch on it (e.g. to show an upgrade modal) instead of string-matching. */
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+function parseErrorDetail(body: unknown, fallback: string): { message: string; code?: string } {
+  const detail = (body as { detail?: unknown } | null)?.detail;
+  if (detail && typeof detail === "object") {
+    const d = detail as { code?: string; message?: string };
+    return { message: d.message || fallback, code: d.code };
+  }
+  if (typeof detail === "string") return { message: detail };
+  return { message: fallback };
+}
+
 async function fetchApi<T>(
   path: string,
   options?: RequestInit & { cache?: RequestCache },
@@ -69,8 +108,13 @@ async function fetchApi<T>(
     },
   });
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `HTTP ${res.status}`);
+    let parsed: { message: string; code?: string } = { message: `HTTP ${res.status}` };
+    try {
+      parsed = parseErrorDetail(await res.json(), `HTTP ${res.status}`);
+    } catch {
+      // response wasn't JSON; fall back to the generic HTTP status message
+    }
+    throw new ApiError(parsed.message, res.status, parsed.code);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -109,12 +153,13 @@ export function createRunWithProgress(
           reject(new Error("Invalid response from server"));
         }
       } else {
+        let parsed: { message: string; code?: string } = { message: `HTTP ${xhr.status}` };
         try {
-          const body = JSON.parse(xhr.responseText) as { detail?: string };
-          reject(new Error(body.detail || `HTTP ${xhr.status}`));
+          parsed = parseErrorDetail(JSON.parse(xhr.responseText), `HTTP ${xhr.status}`);
         } catch {
-          reject(new Error(`HTTP ${xhr.status}`));
+          // response wasn't JSON; fall back to the generic HTTP status message
         }
+        reject(new ApiError(parsed.message, xhr.status, parsed.code));
       }
     });
 
@@ -155,4 +200,47 @@ export async function deleteRun(id: string, token: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Current user's tier/trial/scan-usage/referral status. Requires a valid Clerk Bearer token. */
+export async function getBillingStatus(token: string): Promise<BillingStatus> {
+  return fetchApi<BillingStatus>("/api/billing/status", undefined, token);
+}
+
+/** Start a Stripe Checkout session for the given plan; returns the URL to redirect to. */
+export async function createCheckoutSession(
+  plan: "monthly" | "yearly",
+  token: string,
+): Promise<{ url: string }> {
+  return fetchApi<{ url: string }>(
+    "/api/billing/checkout",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan }),
+    },
+    token,
+  );
+}
+
+/** Open the Stripe Customer Portal for the current user; returns the URL to redirect to. */
+export async function createPortalSession(token: string): Promise<{ url: string }> {
+  return fetchApi<{ url: string }>("/api/billing/portal", { method: "POST" }, token);
+}
+
+/** Download a run's branded PDF report (Pro-gated). Requires a valid Clerk Bearer token. */
+export async function downloadRunReportPdf(runId: string, token: string): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/api/runs/${runId}/report.pdf`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    let parsed: { message: string; code?: string } = { message: `HTTP ${res.status}` };
+    try {
+      parsed = parseErrorDetail(await res.json(), `HTTP ${res.status}`);
+    } catch {
+      // response wasn't JSON; fall back to the generic HTTP status message
+    }
+    throw new ApiError(parsed.message, res.status, parsed.code);
+  }
+  return res.blob();
 }

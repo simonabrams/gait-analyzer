@@ -18,7 +18,7 @@ from sentry_sdk.integrations.celery import CeleryIntegration
 
 from backend.database import get_db_session
 from backend.job_runner import run_analysis
-from backend.models import Run, RunStatus
+from backend.models import Run, RunStatus, Subscription, SubscriptionTier
 from backend.storage import (
     annotated_video_key,
     dashboard_image_key,
@@ -63,6 +63,36 @@ app.conf.worker_concurrency = int(os.environ.get("CELERY_WORKER_CONCURRENCY", "1
 _current_run_id: str | None = None
 
 
+def _mark_failed(db, run: Run, error_message: str) -> None:
+    """Mark a run failed and, for free-tier users, refund the free scan they
+    were charged for — a pipeline bug shouldn't burn a user's one free shot."""
+    run.status = RunStatus.failed
+    run.error_message = error_message
+    run.progress_pct = 0
+    if run.user_id:
+        sub = db.query(Subscription).filter(Subscription.user_id == run.user_id).first()
+        if sub and sub.tier == SubscriptionTier.free.value and sub.free_scans_used > 0:
+            sub.free_scans_used -= 1
+    db.commit()
+
+
+def _grant_referral_bonus_if_eligible(db, run: Run) -> None:
+    """On a run reaching 'complete', pay out the one-time referral bonus (if
+    this user was referred and hasn't been paid out yet) to both parties."""
+    if not run.user_id:
+        return
+    sub = db.query(Subscription).filter(Subscription.user_id == run.user_id).first()
+    if not sub or not sub.referred_by_code or sub.referral_bonus_granted:
+        return
+    referrer = db.query(Subscription).filter(Subscription.referral_code == sub.referred_by_code).first()
+    if not referrer:
+        return
+    sub.bonus_scans += 1
+    referrer.bonus_scans += 1
+    sub.referral_bonus_granted = True
+    db.commit()
+
+
 def _handle_sigterm(signum, frame):
     """On SIGTERM (Render deploy/scale-down), mark the in-flight run as failed so it
     doesn't stay stuck in 'processing' indefinitely."""
@@ -71,9 +101,7 @@ def _handle_sigterm(signum, frame):
             db = get_db_session()
             run = db.query(Run).filter(Run.id == uuid.UUID(_current_run_id)).first()
             if run and run.status == RunStatus.processing:
-                run.status = RunStatus.failed
-                run.error_message = "Worker was restarted during processing. Please re-submit."
-                db.commit()
+                _mark_failed(db, run, "Worker was restarted during processing. Please re-submit.")
             db.close()
         except Exception:
             pass  # Best-effort; the process is dying anyway
@@ -177,6 +205,8 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
         run.error_message = None
         db.commit()
 
+        _grant_referral_bonus_if_eligible(db, run)
+
         if posthog_client and run.user_id:
             summary = (out["results"] or {}).get("summary") or {}
             posthog_client.capture(
@@ -195,10 +225,7 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
             except OSError:
                 pass
     except celery.exceptions.SoftTimeLimitExceeded:
-        run.status = RunStatus.failed
-        run.error_message = "Analysis timed out (video may be too long or complex). Please try a shorter clip."
-        run.progress_pct = 0
-        db.commit()
+        _mark_failed(db, run, "Analysis timed out (video may be too long or complex). Please try a shorter clip.")
         if posthog_client and run.user_id:
             posthog_client.capture(
                 run.user_id,
@@ -207,10 +234,7 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
             )
         raise
     except Exception as e:
-        run.status = RunStatus.failed
-        run.error_message = str(e)
-        run.progress_pct = 0
-        db.commit()
+        _mark_failed(db, run, str(e))
         if posthog_client and run.user_id:
             posthog_client.capture(
                 run.user_id,

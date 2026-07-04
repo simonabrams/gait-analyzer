@@ -1,9 +1,9 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-// Only the runs list requires sign-in.
+// Only the runs list, run comparison, and account pages require sign-in.
 // Individual run detail pages (/runs/[id]) are intentionally public
 // so share links and the sample run work without auth.
-const isProtectedRoute = createRouteMatcher(["/runs"]);
+const isProtectedRoute = createRouteMatcher(["/runs", "/runs/compare", "/account(.*)"]);
 
 export default clerkMiddleware(async (auth, req) => {
   if (isProtectedRoute(req)) {

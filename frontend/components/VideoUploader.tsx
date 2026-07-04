@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useAuth, SignInButton } from "@clerk/nextjs";
-import { createRunWithProgress, getRunStatus } from "@/lib/api";
+import { ApiError, createRunWithProgress, getRunStatus } from "@/lib/api";
+import UpgradeModal from "@/components/UpgradeModal";
 import posthog from "posthog-js";
 
 function getProcessingStage(pct: number): string {
@@ -35,6 +36,7 @@ export default function VideoUploader({
   const [status, setStatus] = useState<string | null>(null);
   const [preprocessingWarning, setPreprocessingWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [upgradeCode, setUpgradeCode] = useState<string | null>(null);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { isSignedIn, getToken } = useAuth();
 
@@ -62,6 +64,7 @@ export default function VideoUploader({
   const submit = async () => {
     if (!file) return;
     setError(null);
+    setUpgradeCode(null);
     setPreprocessingWarning(null);
     setUploadProgress(0);
     setProcessingProgress(null);
@@ -75,6 +78,8 @@ export default function VideoUploader({
       const form = new FormData();
       form.append("file", file);
       form.append("height_cm", String(height));
+      const referralCode = localStorage.getItem("gait_referral_code");
+      if (referralCode) form.append("referral_code", referralCode);
 
       // Use a longer-lived JWT template (10 min) so the token doesn't expire
       // mid-upload for large files on slow connections. The default session
@@ -110,13 +115,18 @@ export default function VideoUploader({
       pollTimeoutRef.current = setTimeout(() => poll(2000), 2000);
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : "Upload failed";
-      setError(errorMessage);
       setUploadProgress(null);
       setProcessingProgress(null);
       setStatus(null);
+      if (e instanceof ApiError && e.code) {
+        setUpgradeCode(e.code);
+      } else {
+        setError(errorMessage);
+      }
       posthog.capture("upload_failed", {
         error_message_length: errorMessage.length,
         height_cm: height,
+        error_code: e instanceof ApiError ? e.code : undefined,
       });
     }
   };
@@ -219,6 +229,9 @@ export default function VideoUploader({
             Sign in to Analyze
           </button>
         </SignInButton>
+      )}
+      {upgradeCode && (
+        <UpgradeModal code={upgradeCode} source="upload_blocked" onClose={() => setUpgradeCode(null)} />
       )}
     </div>
   );

@@ -56,6 +56,22 @@ services:
         sync: false
       - key: GAIT_MAX_WIDTH
         sync: false
+      # Stripe billing. From Stripe Dashboard → Developers → API keys / Webhooks / Products.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_ID_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_ID_YEARLY
+        sync: false
+      # Public frontend URL, used to build Stripe checkout/portal redirect URLs
+      # and referral links.
+      - key: FRONTEND_URL
+        sync: false
+      # Dev-only escape hatch — force every user to appear as Pro. Leave unset in production.
+      - key: DEV_FORCE_PRO_TIER
+        sync: false
 
   - type: worker
     name: gait-worker

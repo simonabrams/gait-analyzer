@@ -5,6 +5,7 @@ import { getRun } from "@/lib/api";
 import MetricCards from "@/components/MetricCards";
 import FeedbackCards from "@/components/FeedbackCards";
 import ShareButton from "@/components/ShareButton";
+import PdfReportButton from "@/components/PdfReportButton";
 import AccuracyBanner from "@/components/AccuracyBanner";
 
 type Props = { params: Promise<{ id: string }> };
@@ -107,6 +108,7 @@ export default async function RunResultPage({ params }: Props) {
         </div>
         <div className="flex items-center gap-2 pt-1">
           <ShareButton runId={id} />
+          {hasData && <PdfReportButton runId={id} />}
           <Link
             href="/runs"
             className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors"

@@ -3,10 +3,18 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
-import { listRuns, deleteRun, type RunListItem, type RunListResponse } from "@/lib/api";
+import {
+  listRuns,
+  deleteRun,
+  getBillingStatus,
+  type RunListItem,
+  type RunListResponse,
+  type BillingStatus,
+} from "@/lib/api";
 
 const PAGE_SIZE = 50;
 import ProgressCharts from "@/components/ProgressCharts";
+import ProUpsellTeaser from "@/components/ProUpsellTeaser";
 
 function formatDate(created_at: string) {
   return new Date(created_at).toLocaleString(undefined, {
@@ -38,7 +46,17 @@ export default function RunsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [errorId, setErrorId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
   const { getToken } = useAuth();
+
+  const toggleSelect = (runId: string) => {
+    setSelected((prev) => {
+      if (prev.includes(runId)) return prev.filter((id) => id !== runId);
+      if (prev.length >= 2) return prev;
+      return [...prev, runId];
+    });
+  };
 
   const loadRuns = async (pageIndex: number) => {
     setLoading(true);
@@ -50,6 +68,11 @@ export default function RunsPage() {
       );
       setRuns(resp.items);
       setTotal(resp.total);
+      if (token) {
+        getBillingStatus(token)
+          .then(setBilling)
+          .catch(() => setBilling(null));
+      }
     } catch {
       setRuns([]);
       setTotal(0);
@@ -136,7 +159,14 @@ export default function RunsPage() {
           <SectionEyebrow label="Run Timeline" />
           <h2 className="text-xl font-semibold text-white mt-1">Metrics Over Time</h2>
         </div>
-        <ProgressCharts runs={runs} />
+        {billing?.is_pro ? (
+          <ProgressCharts runs={runs} />
+        ) : (
+          <ProUpsellTeaser
+            title="Unlock progress tracking with Pro"
+            body="See your cadence, bounce, and knee drive trend across every run — upgrade to Pro for unlimited scans and full progress charts."
+          />
+        )}
       </div>
 
       {/* Runs table */}
@@ -236,6 +266,7 @@ export default function RunsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/10">
+                <th className="text-left px-4 py-3 w-10" aria-label="Compare" />
                 <th className="text-left px-4 py-3 text-xs font-semibold tracking-wider text-gray-400 uppercase">Uploaded</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold tracking-wider text-gray-400 uppercase">Recorded</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold tracking-wider text-gray-400 uppercase">Cadence</th>
@@ -255,6 +286,16 @@ export default function RunsPage() {
                   }`}
                   onClick={() => window.location.assign(`/runs/${r.run_id}`)}
                 >
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(r.run_id)}
+                      disabled={!selected.includes(r.run_id) && selected.length >= 2}
+                      onChange={() => toggleSelect(r.run_id)}
+                      aria-label="Select for comparison"
+                      className="accent-primary"
+                    />
+                  </td>
                   <td className="px-4 py-3 text-gray-300">{formatDate(r.created_at)}</td>
                   <td className="px-4 py-3 text-gray-400">{r.recorded_at ? formatDate(r.recorded_at) : "—"}</td>
                   <td className="px-4 py-3 font-medium text-white">{r.cadence_avg != null ? `${r.cadence_avg} spm` : "—"}</td>
@@ -365,6 +406,30 @@ export default function RunsPage() {
           </div>
         )}
       </div>
+
+      {selected.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-4 bg-secondary border border-white/10 rounded-xl px-5 py-3 shadow-lg">
+          <span className="text-sm text-gray-300">{selected.length}/2 selected for comparison</span>
+          <Link
+            href={selected.length === 2 ? `/runs/compare?a=${selected[0]}&b=${selected[1]}` : "#"}
+            aria-disabled={selected.length !== 2}
+            className={`text-sm font-semibold px-4 py-2 rounded-lg transition-opacity ${
+              selected.length === 2
+                ? "bg-primary text-background hover:opacity-90"
+                : "bg-white/10 text-gray-500 pointer-events-none"
+            }`}
+          >
+            Compare runs →
+          </Link>
+          <button
+            type="button"
+            onClick={() => setSelected([])}
+            className="text-xs text-gray-500 hover:text-white"
+          >
+            Clear
+          </button>
+        </div>
+      )}
 
     </div>
   );

@@ -21,6 +21,13 @@ export default function HomeClient() {
       .catch(() => setHasRuns(false));
   }, [isSignedIn, getToken]);
 
+  // Capture a referral code from the URL (e.g. shared as runlens.io/?ref=CODE) so
+  // VideoUploader can attach it to this user's first analysis.
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get("ref");
+    if (ref) localStorage.setItem("gait_referral_code", ref);
+  }, []);
+
   const handleComplete = (runId: string) => {
     router.push(`/runs/${runId}`);
   };

@@ -2,7 +2,7 @@
 Pydantic request/response schemas.
 """
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -50,3 +50,29 @@ class RunDetail(BaseModel):
     annotated_video_url: Optional[str] = None
     dashboard_image_url: Optional[str] = None
     error_message: Optional[str] = None
+
+
+class CheckoutRequest(BaseModel):
+    plan: Literal["monthly", "yearly"]
+
+
+class CheckoutResponse(BaseModel):
+    url: str
+
+
+class PortalResponse(BaseModel):
+    url: str
+
+
+class BillingStatusResponse(BaseModel):
+    tier: str
+    status: Optional[str] = None
+    is_pro: bool
+    trial_end: Optional[datetime] = None
+    current_period_end: Optional[datetime] = None
+    cancel_at_period_end: bool = False
+    free_scans_used: int
+    free_scans_limit: int = 1
+    bonus_scans: int = 0
+    referral_code: str
+    referral_link: str

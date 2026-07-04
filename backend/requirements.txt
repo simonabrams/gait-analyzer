@@ -34,6 +34,12 @@ sentry-sdk[fastapi,celery]>=2.0.0
 # Analytics
 posthog>=3.0.0
 
+# Billing
+stripe>=10.0.0
+
+# PDF report export
+reportlab>=4.0.0
+
 # Presigned URL caching
 cachetools>=5.3.0
 

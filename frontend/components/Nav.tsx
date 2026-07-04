@@ -74,6 +74,8 @@ export default function Nav() {
         <div className="hidden md:flex items-center gap-8 absolute left-1/2 -translate-x-1/2">
           {navLink("/runs", "Runs")}
           <span className="text-gray-600">|</span>
+          {navLink("/pricing", "Pricing")}
+          <span className="text-gray-600">|</span>
           {navLink("/about", "About")}
         </div>
 
@@ -120,6 +122,7 @@ export default function Nav() {
       {menuOpen && (
         <div className="md:hidden bg-black/95 border-t border-white/10 py-4 px-6 flex flex-col gap-4">
           {navLink("/runs", "Runs")}
+          {navLink("/pricing", "Pricing")}
           {navLink("/about", "About")}
           {isSignedIn ? (
             <UserButton />
