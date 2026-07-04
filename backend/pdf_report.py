@@ -67,35 +67,39 @@ def build_run_report_pdf(run, output_path: str) -> None:
     story.append(table)
     story.append(Spacer(1, 0.3 * inch))
 
-    if run.dashboard_image_r2_key:
-        fd, dashboard_tmp_path = tempfile.mkstemp(suffix=".png")
-        os.close(fd)
-        try:
+    dashboard_tmp_path = None
+    try:
+        if run.dashboard_image_r2_key:
+            fd, dashboard_tmp_path = tempfile.mkstemp(suffix=".png")
+            os.close(fd)
             storage.download_file(run.dashboard_image_r2_key, dashboard_tmp_path)
             story.append(
                 Image(dashboard_tmp_path, width=6.5 * inch, height=3.9 * inch, kind="proportional")
             )
             story.append(Spacer(1, 0.3 * inch))
-        finally:
-            Path(dashboard_tmp_path).unlink(missing_ok=True)
 
-    story.append(Paragraph("Flagged issues and recommendations", heading_style))
-    if flags:
-        for f in flags:
-            story.append(
-                Paragraph(
-                    f"<b>{f.get('metric', '')}</b> — value {f.get('value')} "
-                    f"(threshold: {f.get('threshold')})",
-                    body_style,
-                )
-            )
-            story.append(Paragraph(f.get("recommendation", ""), body_style))
-            for ex in f.get("exercises") or []:
+        story.append(Paragraph("Flagged issues and recommendations", heading_style))
+        if flags:
+            for f in flags:
                 story.append(
-                    Paragraph(f"&bull; {ex.get('name', '')}: {ex.get('description', '')}", body_style)
+                    Paragraph(
+                        f"<b>{f.get('metric', '')}</b> — value {f.get('value')} "
+                        f"(threshold: {f.get('threshold')})",
+                        body_style,
+                    )
                 )
-            story.append(Spacer(1, 0.15 * inch))
-    else:
-        story.append(Paragraph("No issues flagged. Metrics within target ranges.", body_style))
+                story.append(Paragraph(f.get("recommendation", ""), body_style))
+                for ex in f.get("exercises") or []:
+                    story.append(
+                        Paragraph(f"&bull; {ex.get('name', '')}: {ex.get('description', '')}", body_style)
+                    )
+                story.append(Spacer(1, 0.15 * inch))
+        else:
+            story.append(Paragraph("No issues flagged. Metrics within target ranges.", body_style))
 
-    doc.build(story)
+        # doc.build() must run before the temp file is unlinked below: platypus's
+        # Image flowable reads the file lazily at build time, not at construction.
+        doc.build(story)
+    finally:
+        if dashboard_tmp_path:
+            Path(dashboard_tmp_path).unlink(missing_ok=True)
