@@ -179,6 +179,12 @@ def _cached_presigned_url(r2_key: str) -> str:
 # ---------------------------------------------------------------------------
 # Health — verifies DB and Redis are reachable before returning 200
 # ---------------------------------------------------------------------------
+_redis_client = redis_lib.from_url(
+    os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
+    socket_connect_timeout=2,
+)
+
+
 @app.get("/api/health")
 def health(db: Session = Depends(get_db)):
     failing = []
@@ -191,10 +197,8 @@ def health(db: Session = Depends(get_db)):
         failing.append("database")
 
     # Redis check
-    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
     try:
-        r = redis_lib.from_url(redis_url, socket_connect_timeout=2)
-        r.ping()
+        _redis_client.ping()
     except Exception as exc:
         logger.error("Health check: Redis unreachable: %s", exc)
         failing.append("redis")
