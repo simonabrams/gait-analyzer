@@ -1,7 +1,6 @@
 """
 FastAPI app: runs API, health, CORS.
 """
-import atexit
 import logging
 import os
 import tempfile
@@ -14,7 +13,6 @@ import redis as redis_lib
 import sentry_sdk
 import stripe
 from cachetools import TTLCache
-from posthog import Posthog
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -27,6 +25,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from backend import billing, storage
+from backend.analytics import posthog_client
 from backend.database import get_db
 from backend.models import Run, RunStatus, Subscription, SubscriptionTier
 from backend.schemas import (
@@ -63,19 +62,7 @@ if SENTRY_DSN:
     sentry_sdk.init(dsn=SENTRY_DSN)
     logger.info("Sentry initialised")
 
-# ---------------------------------------------------------------------------
-# PostHog
-# ---------------------------------------------------------------------------
-_POSTHOG_TOKEN = os.environ.get("POSTHOG_PROJECT_TOKEN", "").strip()
-_POSTHOG_HOST = os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com").strip()
-posthog_client: Posthog | None = None
-if _POSTHOG_TOKEN:
-    posthog_client = Posthog(
-        project_api_key=_POSTHOG_TOKEN,
-        host=_POSTHOG_HOST,
-        enable_exception_autocapture=True,
-    )
-    atexit.register(posthog_client.shutdown)
+if posthog_client:
     logger.info("PostHog initialised")
 
 # ---------------------------------------------------------------------------

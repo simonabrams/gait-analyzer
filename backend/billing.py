@@ -8,9 +8,9 @@ import uuid
 from datetime import datetime, timezone
 
 import stripe
-from posthog import Posthog
 from sqlalchemy.orm import Session
 
+from backend.analytics import capture as _capture
 from backend.models import Subscription, SubscriptionTier
 
 logger = logging.getLogger(__name__)
@@ -26,17 +26,6 @@ WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
 DEV_FORCE_PRO_TIER = os.environ.get("DEV_FORCE_PRO_TIER", "").strip().lower() in ("1", "true", "yes")
 
 _ACTIVE_STATUSES = {"trialing", "active", "grandfathered"}
-
-_POSTHOG_TOKEN = os.environ.get("POSTHOG_PROJECT_TOKEN", "").strip()
-_POSTHOG_HOST = os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com").strip()
-posthog_client: Posthog | None = None
-if _POSTHOG_TOKEN:
-    posthog_client = Posthog(project_api_key=_POSTHOG_TOKEN, host=_POSTHOG_HOST)
-
-
-def _capture(user_id: str, event: str, properties: dict | None = None) -> None:
-    if posthog_client:
-        posthog_client.capture(user_id, event, properties=properties or {})
 
 
 def _new_referral_code() -> str:

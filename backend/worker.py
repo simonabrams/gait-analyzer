@@ -1,7 +1,6 @@
 """
 Celery app and process_video task: download from R2, preprocess, run job_runner, upload outputs, update DB.
 """
-import atexit
 import logging
 import os
 import signal
@@ -13,9 +12,9 @@ from pathlib import Path
 import celery
 import celery.exceptions
 import sentry_sdk
-from posthog import Posthog
 from sentry_sdk.integrations.celery import CeleryIntegration
 
+from backend.analytics import posthog_client
 from backend.database import get_db_session
 from backend.job_runner import run_analysis
 from backend.models import Run, RunStatus, Subscription, SubscriptionTier
@@ -34,17 +33,6 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
 if SENTRY_DSN:
     sentry_sdk.init(dsn=SENTRY_DSN, integrations=[CeleryIntegration()])
-
-_POSTHOG_TOKEN = os.environ.get("POSTHOG_PROJECT_TOKEN", "").strip()
-_POSTHOG_HOST = os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com").strip()
-posthog_client: Posthog | None = None
-if _POSTHOG_TOKEN:
-    posthog_client = Posthog(
-        project_api_key=_POSTHOG_TOKEN,
-        host=_POSTHOG_HOST,
-        enable_exception_autocapture=True,
-    )
-    atexit.register(posthog_client.shutdown)
 
 app = celery.Celery(
     "gait_analyzer",
