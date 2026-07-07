@@ -60,7 +60,7 @@ Each pipeline step is a separate module in `backend/`. The `job_runner.py` orche
 ### Authentication
 - Clerk JWT (RS256) via JWKS endpoint, verified in `backend/main.py` via `_verify_jwt()`
 - Dev mode: unset `CLERK_JWKS_URL` → all requests become `"dev-user"` (no auth check)
-- Frontend: `middleware.ts` protects `/runs` (list only); `/runs/[id]` is intentionally public for sharing
+- Frontend: `middleware.ts` protects `/runs`, `/runs/compare`, and `/account(.*)`; `/runs/[id]` is intentionally public for sharing
 
 ### Key Design Decisions
 - **Worker concurrency = 1**: Prevents OOM when processing long/large videos
@@ -75,6 +75,8 @@ Each pipeline step is a separate module in `backend/`. The `job_runner.py` orche
 | `/about` | Public | Info page |
 | `/runs` | **Protected** | User's run history + charts |
 | `/runs/[id]` | Public | Run detail — shareable link |
+| `/runs/compare` | **Protected** | Compare metrics across runs |
+| `/account/*` | **Protected** | Billing / subscription management |
 
 ### Backend API Routes
 | Method | Path | Purpose |
