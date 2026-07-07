@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { getRun } from "@/lib/api";
+import { METRIC_TARGETS } from "@/lib/metricTargets";
 
 export const alt = "Run Report — Runlens";
 export const size = { width: 1200, height: 630 };
@@ -72,17 +73,17 @@ export default async function Image({ params }: { params: { id: string } }) {
     {
       label: "Cadence",
       value: cadenceVal != null ? `${cadenceVal} SPM` : "—",
-      good: cadenceVal != null ? cadenceVal >= 170 : null,
+      good: cadenceVal != null ? METRIC_TARGETS.cadence.good(cadenceVal) : null,
     },
     {
       label: "Bounce",
       value: vertOscVal != null ? `${vertOscVal} cm` : "—",
-      good: vertOscVal != null ? vertOscVal <= 10 : null,
+      good: vertOscVal != null ? METRIC_TARGETS.bounce.good(vertOscVal) : null,
     },
     {
       label: "Knee Drive",
       value: kneeVal != null ? `${kneeVal}°` : "—",
-      good: kneeVal != null ? kneeVal >= 15 : null,
+      good: kneeVal != null ? METRIC_TARGETS.kneeDrive.good(kneeVal) : null,
     },
   ];
 

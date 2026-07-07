@@ -14,16 +14,23 @@ from reportlab.lib.units import inch
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from backend import storage
+from backend.heuristics import (
+    CADENCE_MIN_SPM,
+    KNEE_FLEXION_MIN_DEG,
+    OVERSTRIDE_CM_THRESHOLD,
+    TRUNK_LEAN_MAX_DEG,
+    VERTICAL_OSC_MAX_CM,
+)
 
 _PRIMARY = colors.HexColor("#00C896")
 _DARK = colors.HexColor("#0F0F0F")
 
 _METRIC_ROWS = [
-    ("Cadence", "cadence_avg", "spm", "≥ 170 spm"),
-    ("Bounce", "vertical_osc_avg_cm", "cm", "≤ 10 cm"),
-    ("Knee drive", "knee_angle_strike_avg_deg", "°", "≥ 15°"),
-    ("Foot strike position", "foot_strike_position_avg_cm", "cm", "≤ 10 cm"),
-    ("Trunk lean", "trunk_lean_avg_deg", "°", "≤ 15°"),
+    ("Cadence", "cadence_avg", "spm", f"≥ {CADENCE_MIN_SPM} spm"),
+    ("Bounce", "vertical_osc_avg_cm", "cm", f"≤ {VERTICAL_OSC_MAX_CM} cm"),
+    ("Knee drive", "knee_angle_strike_avg_deg", "°", f"≥ {KNEE_FLEXION_MIN_DEG}°"),
+    ("Foot strike position", "foot_strike_position_avg_cm", "cm", f"≤ {OVERSTRIDE_CM_THRESHOLD} cm"),
+    ("Trunk lean", "trunk_lean_avg_deg", "°", f"≤ {TRUNK_LEAN_MAX_DEG}°"),
 ]
 
 

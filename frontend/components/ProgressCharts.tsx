@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { RunListItem } from "@/lib/api";
+import { METRIC_TARGETS } from "@/lib/metricTargets";
 
 interface ProgressChartsProps {
   runs: RunListItem[];
@@ -84,7 +85,7 @@ export default function ProgressCharts({ runs }: ProgressChartsProps) {
               }}
               itemStyle={{ color: "#00C896" }}
             />
-            <ReferenceLine y={170} stroke={REF_COLOR} strokeDasharray="4 4" />
+            <ReferenceLine y={METRIC_TARGETS.cadence.target} stroke={REF_COLOR} strokeDasharray="4 4" />
             <Line
               type="monotone"
               dataKey="cadence"
@@ -113,7 +114,7 @@ export default function ProgressCharts({ runs }: ProgressChartsProps) {
               }}
               itemStyle={{ color: "#34d399" }}
             />
-            <ReferenceLine y={10} stroke={REF_COLOR} strokeDasharray="4 4" />
+            <ReferenceLine y={METRIC_TARGETS.bounce.target} stroke={REF_COLOR} strokeDasharray="4 4" />
             <Line
               type="monotone"
               dataKey="verticalOsc"
@@ -142,7 +143,7 @@ export default function ProgressCharts({ runs }: ProgressChartsProps) {
               }}
               itemStyle={{ color: "#fbbf24" }}
             />
-            <ReferenceLine y={15} stroke={REF_COLOR} strokeDasharray="4 4" />
+            <ReferenceLine y={METRIC_TARGETS.kneeDrive.target} stroke={REF_COLOR} strokeDasharray="4 4" />
             <Line
               type="monotone"
               dataKey="kneeAngle"

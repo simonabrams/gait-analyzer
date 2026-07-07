@@ -5,6 +5,14 @@ Generate a matplotlib multi-panel dashboard from the results dict.
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+from backend.heuristics import (
+    CADENCE_MIN_SPM,
+    KNEE_FLEXION_MIN_DEG,
+    OVERSTRIDE_CM_THRESHOLD,
+    VERTICAL_OSC_MAX_CM,
+)
+
 # Site design tokens
 BG_DARK = "#0F0F0F"
 BG_PANEL = "#1A1A1A"
@@ -45,8 +53,8 @@ def create_dashboard(results):
         cadences = [s["cadence"] for s in strides]
         ax1.plot(xs, cadences, color=COLOR_PRIMARY, linewidth=1.8, marker="o",
                  markersize=3.5, markerfacecolor=COLOR_PRIMARY, zorder=3)
-        ax1.axhline(y=170, color=COLOR_TARGET, linewidth=1.2, linestyle="--",
-                    label="Target ≥170 spm", zorder=2)
+        ax1.axhline(y=CADENCE_MIN_SPM, color=COLOR_TARGET, linewidth=1.2, linestyle="--",
+                    label=f"Target ≥{CADENCE_MIN_SPM} spm", zorder=2)
         ax1.legend(fontsize=8, facecolor=BG_PANEL, edgecolor=COLOR_GRID,
                    labelcolor=COLOR_TEXT_DIM, framealpha=1)
         ax1.set_xlim(0.5, len(xs) + 0.5)
@@ -58,8 +66,8 @@ def create_dashboard(results):
         oscs = [s["vertical_osc_cm"] for s in strides]
         ax2.plot(xs, oscs, color=COLOR_PRIMARY, linewidth=1.8, marker="o",
                  markersize=3.5, markerfacecolor=COLOR_PRIMARY, zorder=3)
-        ax2.axhline(y=10, color=COLOR_TARGET, linewidth=1.2, linestyle="--",
-                    label="Max 10 cm", zorder=2)
+        ax2.axhline(y=VERTICAL_OSC_MAX_CM, color=COLOR_TARGET, linewidth=1.2, linestyle="--",
+                    label=f"Max {VERTICAL_OSC_MAX_CM} cm", zorder=2)
         ax2.legend(fontsize=8, facecolor=BG_PANEL, edgecolor=COLOR_GRID,
                    labelcolor=COLOR_TEXT_DIM, framealpha=1)
         ax2.set_xlim(0.5, len(xs) + 0.5)
@@ -69,10 +77,10 @@ def create_dashboard(results):
     _style_ax(ax3, "Knee Drive at Foot Strike", "Stride", "degrees")
     if strides:
         knees = [s.get("knee_angle_strike_deg") or 0 for s in strides]
-        bar_colors = [COLOR_WARN if (k and k < 15) else COLOR_PRIMARY for k in knees]
+        bar_colors = [COLOR_WARN if (k and k < KNEE_FLEXION_MIN_DEG) else COLOR_PRIMARY for k in knees]
         ax3.bar(xs, knees, color=bar_colors, width=0.7, zorder=3)
-        ax3.axhline(y=15, color=COLOR_TARGET, linewidth=1.2, linestyle="--",
-                    label="Min 15°", zorder=4)
+        ax3.axhline(y=KNEE_FLEXION_MIN_DEG, color=COLOR_TARGET, linewidth=1.2, linestyle="--",
+                    label=f"Min {KNEE_FLEXION_MIN_DEG}°", zorder=4)
         ax3.legend(fontsize=8, facecolor=BG_PANEL, edgecolor=COLOR_GRID,
                    labelcolor=COLOR_TEXT_DIM, framealpha=1)
         ax3.set_xlim(0.5, len(xs) + 0.5)
@@ -83,10 +91,10 @@ def create_dashboard(results):
     foot_vals = [s.get("foot_strike_position_cm") for s in strides if s.get("foot_strike_position_cm") is not None]
     if foot_vals:
         xs4 = [i + 1 for i, s in enumerate(strides) if s.get("foot_strike_position_cm") is not None]
-        bar_colors4 = [COLOR_WARN if v > 10 else COLOR_PRIMARY for v in foot_vals]
+        bar_colors4 = [COLOR_WARN if v > OVERSTRIDE_CM_THRESHOLD else COLOR_PRIMARY for v in foot_vals]
         ax4.bar(xs4, foot_vals, color=bar_colors4, width=0.7, zorder=3)
-        ax4.axhline(y=10, color=COLOR_TARGET, linewidth=1.2, linestyle="--",
-                    label="Target ≤10 cm", zorder=4)
+        ax4.axhline(y=OVERSTRIDE_CM_THRESHOLD, color=COLOR_TARGET, linewidth=1.2, linestyle="--",
+                    label=f"Target ≤{OVERSTRIDE_CM_THRESHOLD} cm", zorder=4)
         ax4.legend(fontsize=8, facecolor=BG_PANEL, edgecolor=COLOR_GRID,
                    labelcolor=COLOR_TEXT_DIM, framealpha=1)
         ax4.set_xlim(0.5, max(xs4) + 0.5)

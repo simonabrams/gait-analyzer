@@ -1,31 +1,32 @@
 import { ImageResponse } from "next/og";
 import { NextRequest } from "next/server";
 import { getRun } from "@/lib/api";
+import { METRIC_TARGETS } from "@/lib/metricTargets";
 
 export const runtime = "nodejs";
 
 const SIZE = { width: 1080, height: 1180 };
 
 const HERO = {
-  label: "Cadence",
-  key: "cadence_avg",
-  unit: "SPM",
-  good: (v: number) => v >= 170,
-  score: (v: number) => Math.min(Math.round((v / 170) * 100), 100),
+  label: METRIC_TARGETS.cadence.label,
+  key: METRIC_TARGETS.cadence.key,
+  unit: METRIC_TARGETS.cadence.unit,
+  good: METRIC_TARGETS.cadence.good,
+  score: METRIC_TARGETS.cadence.score,
 };
 
 const SECONDARY = [
   {
-    label: "Bounce",
-    key: "vertical_osc_avg_cm",
-    unit: "cm",
-    good: (v: number) => v <= 10,
+    label: METRIC_TARGETS.bounce.label,
+    key: METRIC_TARGETS.bounce.key,
+    unit: METRIC_TARGETS.bounce.unit,
+    good: METRIC_TARGETS.bounce.good,
   },
   {
-    label: "Knee Drive",
-    key: "knee_angle_strike_avg_deg",
-    unit: "°",
-    good: (v: number) => v >= 15,
+    label: METRIC_TARGETS.kneeDrive.label,
+    key: METRIC_TARGETS.kneeDrive.key,
+    unit: METRIC_TARGETS.kneeDrive.unit,
+    good: METRIC_TARGETS.kneeDrive.good,
   },
 ];
 

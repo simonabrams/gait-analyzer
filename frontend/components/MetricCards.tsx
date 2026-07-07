@@ -1,4 +1,5 @@
 import MetricTooltip from "@/components/MetricTooltip";
+import { METRIC_TARGETS } from "@/lib/metricTargets";
 
 interface MetricCardsProps {
   summary: Record<string, unknown> | undefined;
@@ -7,17 +8,17 @@ interface MetricCardsProps {
 const CONFIG = [
   {
     label: "CADENCE",
-    key: "cadence_avg",
-    unit: "SPM",
+    key: METRIC_TARGETS.cadence.key,
+    unit: METRIC_TARGETS.cadence.unit,
     tooltip:
       "Measured by detecting stride cycles in your video. Accurate to ±2–3% under good filming conditions. Best validated metric in video-based analysis.",
     disclaimer: null,
-    good: (v: number) => v >= 170,
-    score: (v: number) => Math.min(Math.round((v / 170) * 100), 100),
+    good: METRIC_TARGETS.cadence.good,
+    score: METRIC_TARGETS.cadence.score,
     blurb: (v: number) =>
       v >= 185
         ? "Excellent — high cadence, great efficiency"
-        : v >= 170
+        : v >= METRIC_TARGETS.cadence.target
         ? "Good — within the target range"
         : v >= 155
         ? "Below ideal — aim for 170–185 SPM"
@@ -25,17 +26,17 @@ const CONFIG = [
   },
   {
     label: "BOUNCE",
-    key: "vertical_osc_avg_cm",
-    unit: "cm",
+    key: METRIC_TARGETS.bounce.key,
+    unit: METRIC_TARGETS.bounce.unit,
     tooltip:
       "Estimated from vertical movement of torso landmarks. Compare this session-to-session rather than against your watch — wrist accelerometers and video use different measurement methods.",
     disclaimer: "Best compared session-to-session, not against wearables",
-    good: (v: number) => v <= 10,
-    score: (v: number) => (v <= 0 ? 0 : Math.min(Math.round((10 / v) * 100), 100)),
+    good: METRIC_TARGETS.bounce.good,
+    score: METRIC_TARGETS.bounce.score,
     blurb: (v: number) =>
       v <= 6
         ? "Excellent — minimal energy wasted"
-        : v <= 10
+        : v <= METRIC_TARGETS.bounce.target
         ? "Good — efficient, low bounce"
         : v <= 12
         ? "Slightly high — aim for under 10 cm"
@@ -43,17 +44,17 @@ const CONFIG = [
   },
   {
     label: "KNEE DRIVE",
-    key: "knee_angle_strike_avg_deg",
-    unit: "°",
+    key: METRIC_TARGETS.kneeDrive.key,
+    unit: METRIC_TARGETS.kneeDrive.unit,
     tooltip:
       "Joint angles from a single camera view are reliable within ~10% vs. lab-grade motion capture under optimal conditions. Accuracy drops with non-ideal camera angles.",
     disclaimer: "±~10% vs. lab-grade motion capture",
-    good: (v: number) => v >= 15,
-    score: (v: number) => Math.min(Math.round((v / 15) * 100), 100),
+    good: METRIC_TARGETS.kneeDrive.good,
+    score: METRIC_TARGETS.kneeDrive.score,
     blurb: (v: number) =>
       v >= 20
         ? "Excellent — strong knee drive at strike"
-        : v >= 15
+        : v >= METRIC_TARGETS.kneeDrive.target
         ? "Good — solid knee drive at foot strike"
         : v >= 10
         ? "Below ideal — aim for 15°+"
