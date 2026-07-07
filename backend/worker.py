@@ -69,10 +69,20 @@ def _grant_referral_bonus_if_eligible(db, run: Run) -> None:
     this user was referred and hasn't been paid out yet) to both parties."""
     if not run.user_id:
         return
-    sub = db.query(Subscription).filter(Subscription.user_id == run.user_id).first()
+    sub = (
+        db.query(Subscription)
+        .filter(Subscription.user_id == run.user_id)
+        .with_for_update()
+        .first()
+    )
     if not sub or not sub.referred_by_code or sub.referral_bonus_granted:
         return
-    referrer = db.query(Subscription).filter(Subscription.referral_code == sub.referred_by_code).first()
+    referrer = (
+        db.query(Subscription)
+        .filter(Subscription.referral_code == sub.referred_by_code)
+        .with_for_update()
+        .first()
+    )
     if not referrer:
         return
     sub.bonus_scans += 1
@@ -92,7 +102,7 @@ def _handle_sigterm(signum, frame):
                 _mark_failed(db, run, "Worker was restarted during processing. Please re-submit.")
             db.close()
         except Exception:
-            pass  # Best-effort; the process is dying anyway
+            logger.warning("Failed to mark run %s failed during SIGTERM shutdown", _current_run_id, exc_info=True)
     raise SystemExit(0)
 
 
