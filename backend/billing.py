@@ -156,18 +156,12 @@ def _handle_invoice_payment_failed(db: Session, event_object: dict) -> None:
     stripe_subscription_id = event_object.get("subscription")
     if not stripe_subscription_id:
         return
-    sub = (
-        db.query(Subscription)
-        .filter(Subscription.stripe_subscription_id == stripe_subscription_id)
-        .first()
-    )
-    if not sub:
-        return
-    # customer.subscription.updated is the authoritative status source (Stripe emits
-    # both); this is a best-effort early flag so the frontend can prompt sooner.
-    sub.status = "past_due"
-    db.commit()
-    _capture(sub.user_id, "subscription_payment_failed", {})
+    # Re-fetch from Stripe (same as every other handler) rather than setting
+    # status="past_due" directly, so an out-of-order customer.subscription.updated
+    # can't get clobbered by this event arriving after it.
+    sub = sync_subscription_from_stripe(db, stripe_subscription_id)
+    if sub:
+        _capture(sub.user_id, "subscription_payment_failed", {})
 
 
 def handle_webhook_event(db: Session, event: dict) -> None:
