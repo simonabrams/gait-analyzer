@@ -2,7 +2,6 @@
 Runs the full gait analysis pipeline. Uses tempfile for outputs; caller cleans up.
 """
 
-import json
 import os
 import subprocess
 import tempfile
@@ -16,7 +15,6 @@ from backend.dashboard import create_dashboard
 from backend.heuristics import evaluate_heuristics
 from backend.metrics import compute_metrics
 from backend.pose_extractor import extract_poses
-from backend.reporter import generate_report
 from backend.visualizer import annotate_single_frame, build_frame_to_stride_flags
 
 
@@ -188,24 +186,6 @@ def run_analysis(
         fig.savefig(dashboard_path, dpi=150)
         plt.close(fig)
 
-        report(90, "Writing report...")
-        report_text = generate_report(results_from_json)
-        fd_r, report_path = tempfile.mkstemp(
-            suffix=".txt", prefix="gait_report_"
-        )
-        os.close(fd_r)
-        temp_paths.append(report_path)
-        with open(report_path, "w") as f:
-            f.write(report_text)
-
-        fd_j, results_path = tempfile.mkstemp(
-            suffix=".json", prefix="gait_results_"
-        )
-        os.close(fd_j)
-        temp_paths.append(results_path)
-        with open(results_path, "w") as f:
-            json.dump(results_from_json, f, indent=2)
-
         if truncated and results_from_json.get("meta"):
             results_from_json["meta"]["truncated_frames"] = max_frames
             results_from_json["meta"]["frames_used"] = frames_used
@@ -215,8 +195,6 @@ def run_analysis(
             "results": results_from_json,
             "annotated_video_path": annotated_video_path,
             "dashboard_path": dashboard_path,
-            "report_path": report_path,
-            "results_path": results_path,
             "temp_paths": temp_paths,
             "truncated": truncated,
             "frames_used": frames_used,

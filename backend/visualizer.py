@@ -174,17 +174,6 @@ def annotate_single_frame(frame, frame_idx, pose_by_idx, results, frame_flags=No
     return img
 
 
-def generate_annotated_frames(frames, pose_frames, results):
-    pose_by_idx = {p["frame_idx"]: p for p in pose_frames}
-    frame_flags = build_frame_to_stride_flags(
-        results.get("strides", []), results.get("flags", [])
-    )
-    for i, frame in enumerate(frames):
-        img = annotate_single_frame(frame, i, pose_by_idx, results, frame_flags)
-        if img is not None:
-            yield img
-
-
 def _stride_at_frame(frame_idx, strides):
     for s in strides:
         if s.get("start_frame", 0) <= frame_idx < s.get("end_frame", 0):
