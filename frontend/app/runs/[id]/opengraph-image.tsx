@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { getRun } from "@/lib/api";
+import { getRunOrNull } from "@/lib/api";
 import { METRIC_TARGETS } from "@/lib/metricTargets";
 
 export const alt = "Run Report — Runlens";
@@ -55,12 +55,7 @@ function MetricPill({
 }
 
 export default async function Image({ params }: { params: { id: string } }) {
-  let run;
-  try {
-    run = await getRun(params.id);
-  } catch {
-    run = null;
-  }
+  const run = await getRunOrNull(params.id);
 
   const summary = run?.results?.summary;
   const flags = run?.results?.flags ?? [];

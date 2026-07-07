@@ -1,4 +1,5 @@
 import MetricTooltip from "@/components/MetricTooltip";
+import { computeArcGeometry, RING_GOOD_COLOR, RING_WARN_COLOR } from "@/lib/arcRing";
 import { METRIC_TARGETS } from "@/lib/metricTargets";
 
 interface MetricCardsProps {
@@ -76,10 +77,8 @@ function ArcRing({
   const r = 36;
   const cx = 50;
   const cy = 50;
-  const circumference = 2 * Math.PI * r;
-  const arcLength = circumference * 0.75;
-  const fillLength = arcLength * (Math.min(Math.max(score, 0), 100) / 100);
-  const color = isGood ? "#00C896" : "#F59E0B";
+  const { circumference, arcLength, fillLength } = computeArcGeometry(r, score);
+  const color = isGood ? RING_GOOD_COLOR : RING_WARN_COLOR;
 
   return (
     <div className="relative w-28 h-28 flex items-center justify-center">

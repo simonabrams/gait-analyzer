@@ -1,6 +1,7 @@
 import { ImageResponse } from "next/og";
 import { NextRequest } from "next/server";
-import { getRun } from "@/lib/api";
+import { getRunOrNull } from "@/lib/api";
+import { computeArcGeometry, RING_GOOD_COLOR, RING_WARN_COLOR } from "@/lib/arcRing";
 import { METRIC_TARGETS } from "@/lib/metricTargets";
 
 export const runtime = "nodejs";
@@ -34,10 +35,8 @@ function HeroRing({ score, value, unit, good }: { score: number; value: string; 
   const r = 150;
   const cx = 170;
   const cy = 170;
-  const circumference = 2 * Math.PI * r;
-  const arcLength = circumference * 0.75;
-  const fillLength = arcLength * (Math.min(Math.max(score, 0), 100) / 100);
-  const color = good === false ? "#f59e0b" : "#00C896";
+  const { circumference, arcLength, fillLength } = computeArcGeometry(r, score);
+  const color = good === false ? RING_WARN_COLOR : RING_GOOD_COLOR;
 
   return (
     <div style={{ position: "relative", width: "340px", height: "340px", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -101,12 +100,7 @@ function SecondaryStat({ label, value, good }: { label: string; value: string; g
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  let run;
-  try {
-    run = await getRun(id);
-  } catch {
-    run = null;
-  }
+  const run = await getRunOrNull(id);
 
   const summary = run?.results?.summary;
   const flags = run?.results?.flags ?? [];

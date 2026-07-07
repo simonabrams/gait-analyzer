@@ -180,6 +180,16 @@ export async function getRun(id: string): Promise<RunDetail> {
   return fetchApi<RunDetail>(`/api/runs/${id}`, { cache: "no-store" });
 }
 
+/** Same as getRun, but resolves to null instead of throwing — for image-generation
+ * routes (opengraph-image, share-card) that render a fallback rather than erroring. */
+export async function getRunOrNull(id: string): Promise<RunDetail | null> {
+  try {
+    return await getRun(id);
+  } catch {
+    return null;
+  }
+}
+
 /** List runs for the authenticated user. Requires a valid Clerk Bearer token. */
 export async function listRuns(
   params?: { limit?: number; offset?: number },
