@@ -53,6 +53,12 @@ export interface RunDetail {
   error_message: string | null;
 }
 
+export interface ConsentStatus {
+  policy_version: string;
+  consented: boolean;
+  consented_at: string | null;
+}
+
 export interface BillingStatus {
   tier: string;
   status: string | null;
@@ -210,6 +216,25 @@ export async function deleteRun(id: string, token: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Whether the current user has accepted the current privacy-policy version. */
+export async function getConsentStatus(token: string): Promise<ConsentStatus> {
+  return fetchApi<ConsentStatus>("/api/consent", undefined, token);
+}
+
+/** Record consent to the given policy version. 409 (code "stale_policy_version")
+ * means the policy changed since the page loaded — reload and re-present it. */
+export async function recordConsent(policyVersion: string, token: string): Promise<ConsentStatus> {
+  return fetchApi<ConsentStatus>(
+    "/api/consent",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ policy_version: policyVersion }),
+    },
+    token,
+  );
 }
 
 /** Current user's tier/trial/scan-usage/referral status. Requires a valid Clerk Bearer token. */

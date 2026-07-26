@@ -96,21 +96,18 @@ def generate_presigned_url(r2_key: str, expiration: int = 3600) -> str:
 
 
 def delete_object(r2_key: str) -> None:
+    """Delete a stored object. Raises on failure — callers gate user-facing
+    deletion promises on this, so a swallowed error would mean telling the
+    user data is gone while it silently survives in storage."""
     if _use_local_storage():
         p = _local_path(r2_key)
-        try:
-            if p.is_file():
-                p.unlink()
-        except OSError:
-            pass
+        if p.is_file():
+            p.unlink()
         return
     client = _client()
     if not client:
-        return
-    try:
-        client.delete_object(Bucket=R2_BUCKET_NAME, Key=r2_key)
-    except Exception:
-        pass
+        raise RuntimeError(f"Storage not configured — cannot delete {r2_key}")
+    client.delete_object(Bucket=R2_BUCKET_NAME, Key=r2_key)
 
 
 def raw_video_key(run_id: str) -> str:

@@ -40,6 +40,26 @@ class Run(Base):
     )
 
 
+class ConsentRecord(Base):
+    """Audit log of privacy-policy consent: one row per (user, policy version)
+    acceptance. Rows are append-only and must survive run deletion — they are
+    the proof that processing was consented to. Whether they survive *account*
+    deletion is a counsel question (see docs/trust/02-privacy-policy.md §9)."""
+    __tablename__ = "consent_records"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # Clerk user ID (e.g. "user_2abc...").
+    user_id = Column(String(255), nullable=False, index=True)
+    # Version identifier of the policy text consented to (see backend/consent.py).
+    policy_version = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        # Re-POSTing consent for the same version is a no-op, not a new row.
+        Index("ix_consent_records_user_id_policy_version", "user_id", "policy_version", unique=True),
+    )
+
+
 class SubscriptionTier(str, enum.Enum):
     free = "free"
     pro = "pro"

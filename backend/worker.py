@@ -206,13 +206,12 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
         _grant_referral_bonus_if_eligible(db, run)
 
         if posthog_client and run.user_id:
-            summary = (out["results"] or {}).get("summary") or {}
+            # Product-usage signals only — no body measurements or gait metrics
+            # in analytics (see /privacy: "pages viewed, features used").
             posthog_client.capture(
                 run.user_id,
                 "run_completed",
                 properties={
-                    "height_cm": height_cm,
-                    "cadence_avg": summary.get("cadence_avg"),
                     "flags_count": len((out["results"] or {}).get("flags") or []),
                 },
             )
@@ -228,7 +227,7 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
             posthog_client.capture(
                 run.user_id,
                 "run_failed",
-                properties={"height_cm": height_cm, "error_type": "timeout"},
+                properties={"error_type": "timeout"},
             )
         raise
     except Exception as e:
@@ -237,7 +236,7 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
             posthog_client.capture(
                 run.user_id,
                 "run_failed",
-                properties={"height_cm": height_cm, "error_type": type(e).__name__},
+                properties={"error_type": type(e).__name__},
             )
         raise
     finally:

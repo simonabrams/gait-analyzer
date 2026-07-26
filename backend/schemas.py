@@ -52,6 +52,16 @@ class RunDetail(BaseModel):
     error_message: Optional[str] = None
 
 
+class ConsentStatusResponse(BaseModel):
+    policy_version: str
+    consented: bool
+    consented_at: Optional[datetime] = None
+
+
+class ConsentAcceptRequest(BaseModel):
+    policy_version: str
+
+
 class CheckoutRequest(BaseModel):
     plan: Literal["monthly", "yearly"]
 

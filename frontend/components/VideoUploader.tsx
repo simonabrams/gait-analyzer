@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useAuth, SignInButton } from "@clerk/nextjs";
-import { ApiError, createRunWithProgress, getRunStatus } from "@/lib/api";
+import {
+  ApiError,
+  createRunWithProgress,
+  getConsentStatus,
+  getRunStatus,
+  recordConsent,
+} from "@/lib/api";
+import ConsentModal from "@/components/ConsentModal";
 import UpgradeModal from "@/components/UpgradeModal";
 import posthog from "posthog-js";
 
@@ -37,6 +44,11 @@ export default function VideoUploader({
   const [preprocessingWarning, setPreprocessingWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [upgradeCode, setUpgradeCode] = useState<string | null>(null);
+  const [consentOk, setConsentOk] = useState(false);
+  const [showConsent, setShowConsent] = useState(false);
+  const [consentBusy, setConsentBusy] = useState(false);
+  const [consentError, setConsentError] = useState<string | null>(null);
+  const [policyVersion, setPolicyVersion] = useState<string | null>(null);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { isSignedIn, getToken } = useAuth();
 
@@ -61,7 +73,53 @@ export default function VideoUploader({
     disabled: isActive,
   });
 
+  // Consent gate: the first Analyze click checks the server once; after that the
+  // result is cached in state for the session. The backend enforces this too
+  // (403 consent_required), so this is UX, not the security boundary.
   const submit = async () => {
+    if (!file) return;
+    setError(null);
+    if (!consentOk) {
+      try {
+        const token = await getToken();
+        if (!token) throw new Error("Not signed in");
+        const consentStatus = await getConsentStatus(token);
+        setPolicyVersion(consentStatus.policy_version);
+        if (!consentStatus.consented) {
+          setConsentError(null);
+          setShowConsent(true);
+          return;
+        }
+        setConsentOk(true);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Couldn't check consent status");
+        return;
+      }
+    }
+    await startUpload();
+  };
+
+  const agreeConsent = async () => {
+    setConsentBusy(true);
+    setConsentError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      const version = policyVersion ?? (await getConsentStatus(token)).policy_version;
+      await recordConsent(version, token);
+      setConsentOk(true);
+      setShowConsent(false);
+      await startUpload();
+    } catch (e) {
+      setConsentError(
+        e instanceof Error ? e.message : "Couldn't save your consent — please try again.",
+      );
+    } finally {
+      setConsentBusy(false);
+    }
+  };
+
+  const startUpload = async () => {
     if (!file) return;
     setError(null);
     setUpgradeCode(null);
@@ -72,7 +130,6 @@ export default function VideoUploader({
     posthog.capture("analysis_submitted", {
       file_format: file.name.split(".").pop()?.toLowerCase() ?? "unknown",
       file_size_mb: Math.round((file.size / 1024 / 1024) * 10) / 10,
-      height_cm: height,
     });
     try {
       const form = new FormData();
@@ -118,14 +175,19 @@ export default function VideoUploader({
       setUploadProgress(null);
       setProcessingProgress(null);
       setStatus(null);
-      if (e instanceof ApiError && e.code) {
+      if (e instanceof ApiError && e.code === "consent_required") {
+        // Server-side gate caught a consent gap the client check missed
+        // (e.g. the policy version was bumped mid-session) — re-prompt.
+        setConsentOk(false);
+        setConsentError(null);
+        setShowConsent(true);
+      } else if (e instanceof ApiError && e.code) {
         setUpgradeCode(e.code);
       } else {
         setError(errorMessage);
       }
       posthog.capture("upload_failed", {
         error_message_length: errorMessage.length,
-        height_cm: height,
         error_code: e instanceof ApiError ? e.code : undefined,
       });
     }
@@ -232,6 +294,14 @@ export default function VideoUploader({
       )}
       {upgradeCode && (
         <UpgradeModal code={upgradeCode} source="upload_blocked" onClose={() => setUpgradeCode(null)} />
+      )}
+      {showConsent && (
+        <ConsentModal
+          onAgree={agreeConsent}
+          onClose={() => setShowConsent(false)}
+          busy={consentBusy}
+          error={consentError}
+        />
       )}
     </div>
   );

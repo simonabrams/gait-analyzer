@@ -1,9 +1,14 @@
 """
 FastAPI app: runs API, health, CORS.
 """
+import base64
+import hashlib
+import hmac
+import json
 import logging
 import os
 import tempfile
+import time
 import uuid
 
 from pathlib import Path
@@ -24,7 +29,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from backend import billing, storage
+from backend import billing, consent, storage
 from backend.analytics import posthog_client
 from backend.database import get_db
 from backend.models import Run, RunStatus, Subscription, SubscriptionTier
@@ -32,6 +37,8 @@ from backend.schemas import (
     BillingStatusResponse,
     CheckoutRequest,
     CheckoutResponse,
+    ConsentAcceptRequest,
+    ConsentStatusResponse,
     PortalResponse,
     RunCreatedResponse,
     RunDetail,
@@ -237,6 +244,17 @@ async def create_run(
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
+    # Consent gate comes first: no video may be accepted (or free scan burned)
+    # without a logged consent to the current policy version.
+    if not consent.get_consent(db, user_id):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "consent_required",
+                "message": "Please review and accept the privacy policy before uploading.",
+            },
+        )
+
     sub = billing.get_or_create_subscription(db, user_id)
     if not billing.has_active_access(sub):
         if sub.tier == SubscriptionTier.pro.value:
@@ -339,7 +357,7 @@ async def create_run(
         posthog_client.capture(
             user_id,
             "run_created",
-            properties={"height_cm": height_cm, "file_format": suffix},
+            properties={"file_format": suffix},
         )
     return RunCreatedResponse(run_id=run_id, status="processing")
 
@@ -501,13 +519,17 @@ def delete_run(
     # Return 404 (not 403) so we don't leak that the run exists
     if run.user_id != user_id:
         raise HTTPException(404, "Run not found")
+    # Storage deletion must succeed before the DB row goes away — otherwise we
+    # tell the user their video is gone while it survives in R2 with no
+    # reconciliation path. Failing here leaves the run intact so they can retry.
     try:
         for key in [run.raw_video_r2_key, run.annotated_video_r2_key, run.dashboard_image_r2_key]:
             if key:
                 delete_object(key)
                 _presigned_cache.pop(key, None)
     except Exception as e:
-        logger.warning("R2/local delete failed for run %s: %s", run_id, e)
+        logger.error("Storage delete failed for run %s: %s", run_id, e)
+        raise HTTPException(502, "Couldn't delete the stored files. Please try again.") from e
     run_status = run.status.value
     db.delete(run)
     db.commit()
@@ -519,6 +541,58 @@ def delete_run(
             properties={"run_status": run_status},
         )
     return None
+
+
+# ---------------------------------------------------------------------------
+# Consent — privacy-policy consent status + acceptance (see backend/consent.py)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/consent", response_model=ConsentStatusResponse)
+def get_consent_status(
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    record = consent.get_consent(db, user_id)
+    return ConsentStatusResponse(
+        policy_version=consent.PRIVACY_POLICY_VERSION,
+        consented=record is not None,
+        consented_at=record.created_at if record else None,
+    )
+
+
+@app.post("/api/consent", response_model=ConsentStatusResponse)
+def accept_consent(
+    body: ConsentAcceptRequest,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    # Reject consent to any version other than the current one — a stale client
+    # must reload and re-present the current policy, not log outdated consent.
+    if body.policy_version != consent.PRIVACY_POLICY_VERSION:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "stale_policy_version",
+                "message": "The privacy policy has been updated. Please reload and review the current version.",
+            },
+        )
+    consented_at = consent.record_consent(db, user_id, body.policy_version)
+    logger.info(
+        "Consent recorded",
+        extra={"user_id": user_id, "policy_version": body.policy_version},
+    )
+    if posthog_client:
+        posthog_client.capture(
+            user_id,
+            "consent_accepted",
+            properties={"policy_version": body.policy_version},
+        )
+    return ConsentStatusResponse(
+        policy_version=consent.PRIVACY_POLICY_VERSION,
+        consented=True,
+        consented_at=consented_at,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -587,6 +661,93 @@ def create_portal(
         logger.exception("Stripe portal session creation failed for user %s: %s", user_id, e)
         raise HTTPException(502, "Could not open billing portal. Please try again.") from e
     return PortalResponse(url=session.url)
+
+
+# ---------------------------------------------------------------------------
+# Clerk webhook — account-deletion cascade (GDPR/CCPA deletion path).
+# Configure in Clerk dashboard: endpoint /api/webhooks/clerk, event user.deleted,
+# and set CLERK_WEBHOOK_SECRET to the endpoint's signing secret (whsec_...).
+# ---------------------------------------------------------------------------
+CLERK_WEBHOOK_SECRET = os.environ.get("CLERK_WEBHOOK_SECRET", "").strip()
+
+
+def _verify_svix_signature(secret: str, msg_id: str, timestamp: str, payload: bytes, sig_header: str) -> bool:
+    """Verify a Svix webhook signature (Clerk delivers via Svix).
+
+    Scheme: base64(HMAC-SHA256(base64decode(secret), "{id}.{timestamp}.{body}")),
+    sent as space-separated "v1,<sig>" entries in the svix-signature header.
+    Implemented with stdlib to avoid a svix dependency.
+    """
+    try:
+        ts = int(timestamp)
+    except ValueError:
+        return False
+    if abs(time.time() - ts) > 300:  # 5-min replay window, per Svix docs
+        return False
+    try:
+        key = base64.b64decode(secret.removeprefix("whsec_"))
+    except Exception:
+        return False
+    signed = f"{msg_id}.{timestamp}.".encode() + payload
+    expected = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
+    for part in sig_header.split():
+        version, _, sig = part.partition(",")
+        if version == "v1" and hmac.compare_digest(sig, expected):
+            return True
+    return False
+
+
+@app.post("/api/webhooks/clerk")
+async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
+    if not CLERK_WEBHOOK_SECRET:
+        raise HTTPException(503, "Clerk webhook not configured (set CLERK_WEBHOOK_SECRET)")
+    payload = await request.body()
+    if not _verify_svix_signature(
+        CLERK_WEBHOOK_SECRET,
+        request.headers.get("svix-id", ""),
+        request.headers.get("svix-timestamp", ""),
+        payload,
+        request.headers.get("svix-signature", ""),
+    ):
+        raise HTTPException(400, "Invalid webhook signature")
+
+    event = json.loads(payload)
+    if event.get("type") != "user.deleted":
+        return {"received": True}
+    user_id = (event.get("data") or {}).get("id")
+    if not user_id:
+        return {"received": True}
+
+    # Cascade: purge the user's runs (DB rows + stored videos/images) and
+    # subscription. Consent records are intentionally kept as an append-only
+    # audit trail (see ConsentRecord docstring). A run's DB row is only removed
+    # once its storage deletes succeed, so a failed run survives for the Svix
+    # retry to re-attempt — retries are the reconciliation loop.
+    runs = db.query(Run).filter(Run.user_id == user_id).all()
+    deleted, failed = 0, 0
+    for run in runs:
+        try:
+            for key in (run.raw_video_r2_key, run.annotated_video_r2_key, run.dashboard_image_r2_key):
+                if key:
+                    delete_object(key)
+                    _presigned_cache.pop(key, None)
+        except Exception as e:
+            logger.error("Storage delete failed during account deletion of %s (run %s): %s", user_id, run.id, e)
+            failed += 1
+            continue
+        db.delete(run)
+        deleted += 1
+    db.query(Subscription).filter(Subscription.user_id == user_id).delete()
+    db.commit()
+    logger.info(
+        "Account deletion cascade",
+        extra={"user_id": user_id, "runs_deleted": deleted, "runs_failed": failed},
+    )
+    if failed:
+        raise HTTPException(500, f"{failed} run(s) could not be fully deleted; awaiting retry")
+    if posthog_client:
+        posthog_client.capture(user_id, "account_deleted", properties={"runs_deleted": deleted})
+    return {"received": True}
 
 
 @app.post("/api/billing/webhook")

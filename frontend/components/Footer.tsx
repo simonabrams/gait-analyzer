@@ -7,6 +7,9 @@ export default function Footer() {
         <p>
           © 2025 Runlens | runlens.io | <Link href="/about" className="text-primary hover:underline">About</Link> · <Link href="/runs" className="text-primary hover:underline">Your Runs</Link> · <a href="mailto:hi@runlens.io" className="text-primary hover:underline">hi@runlens.io</a>
         </p>
+        <p>
+          <Link href="/privacy" className="text-primary hover:underline">Privacy</Link> · <Link href="/terms" className="text-primary hover:underline">Terms</Link>
+        </p>
         <p>Not medical advice. For fitness and educational purposes only.</p>
       </div>
     </footer>
