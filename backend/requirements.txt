@@ -53,4 +53,6 @@ cryptography>=42.0.0
 # Dev / CI
 pytest>=7.0.0
 pytest-cov>=4.0.0
-ruff>=0.1.0
+# Pinned: no ruff config exists, so default-rule changes in new releases break
+# CI on untouched code (0.16.0 introduced 97 new findings). Bump deliberately.
+ruff==0.15.20
