@@ -29,7 +29,7 @@ export default function HomeClient() {
   }, []);
 
   const handleComplete = (runId: string) => {
-    router.push(`/runs/${runId}`);
+    router.push(`/runs/${runId}?justCreated=1`);
   };
 
   return (

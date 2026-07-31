@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import Nav from "@/components/Nav";
 import PostHogProvider from "@/components/PostHogProvider";
+import ClaimAnonRuns from "@/components/ClaimAnonRuns";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://runlens.io"),
@@ -34,6 +35,7 @@ export default function RootLayout({
       <html lang="en">
         <body className="antialiased min-h-screen bg-background text-gray-100 font-sans">
           <PostHogProvider>
+            <ClaimAnonRuns />
             <Nav />
             <main className="pt-14 min-h-screen">
               {children}

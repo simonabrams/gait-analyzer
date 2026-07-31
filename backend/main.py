@@ -29,7 +29,8 @@ from slowapi.util import get_remote_address
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from backend import billing, consent, storage
+from backend import anon, billing, claim, consent, storage
+from backend.analytics import capture as posthog_capture
 from backend.analytics import posthog_client
 from backend.database import get_db
 from backend.models import Run, RunStatus, Subscription, SubscriptionTier
@@ -37,6 +38,8 @@ from backend.schemas import (
     BillingStatusResponse,
     CheckoutRequest,
     CheckoutResponse,
+    ClaimRequest,
+    ClaimResponse,
     ConsentAcceptRequest,
     ConsentStatusResponse,
     PortalResponse,
@@ -135,6 +138,20 @@ def _verify_jwt(authorization: str) -> str:
 
 
 def get_current_user(authorization: str = Header(default="")) -> str:
+    return _verify_jwt(authorization)
+
+
+def get_optional_user(authorization: str = Header(default="")) -> str | None:
+    """Like get_current_user, but tolerates a fully absent Authorization header
+    (anonymous request) instead of requiring one. A present-but-malformed/expired
+    token still 401s via _verify_jwt — only *absence* of auth is now allowed.
+
+    Note: unlike get_current_user, this does NOT fall back to _DEV_USER in dev
+    mode when the header is absent — that fallback only fires when _verify_jwt
+    is actually invoked, so anonymous requests behave the same in dev and prod.
+    """
+    if not authorization:
+        return None
     return _verify_jwt(authorization)
 
 
@@ -242,8 +259,13 @@ async def create_run(
     height_cm: int = Form(..., ge=100, le=250),
     referral_code: str | None = Form(None),
     db: Session = Depends(get_db),
-    user_id: str = Depends(get_current_user),
+    auth_user_id: str | None = Depends(get_optional_user),
+    x_anon_id: str | None = Header(default=None, alias="X-Anon-Id"),
 ):
+    # Anonymous visitors (no Clerk session) get one free scan, tracked against
+    # a client-generated anon id instead of a Clerk user id — see backend/anon.py.
+    user_id = anon.resolve_user_id(auth_user_id, x_anon_id)
+
     # Consent gate comes first: no video may be accepted (or free scan burned)
     # without a logged consent to the current policy version.
     if not consent.get_consent(db, user_id):
@@ -353,12 +375,11 @@ async def create_run(
             "Job queue unavailable. Is Redis running?",
         ) from e
     logger.info("Run created", extra={"run_id": str(run_id), "height_cm": height_cm, "user_id": user_id})
-    if posthog_client:
-        posthog_client.capture(
-            user_id,
-            "run_created",
-            properties={"file_format": suffix},
-        )
+    posthog_capture(
+        user_id,
+        "run_created",
+        {"file_format": suffix, "is_anonymous": auth_user_id is None},
+    )
     return RunCreatedResponse(run_id=run_id, status="processing")
 
 
@@ -412,12 +433,8 @@ def get_run(
             detail.annotated_video_url = _cached_presigned_url(run.annotated_video_r2_key)
         if run.dashboard_image_r2_key:
             detail.dashboard_image_url = _cached_presigned_url(run.dashboard_image_r2_key)
-    if posthog_client and run.user_id:
-        posthog_client.capture(
-            run.user_id,
-            "run_viewed",
-            properties={"run_status": run.status.value},
-        )
+    if run.user_id:
+        posthog_capture(run.user_id, "run_viewed", {"run_status": run.status.value})
     return detail
 
 
@@ -461,8 +478,7 @@ def get_run_report_pdf(
         except OSError:
             pass
 
-    if posthog_client:
-        posthog_client.capture(user_id, "pdf_report_downloaded", properties={"run_id": str(run_id)})
+    posthog_capture(user_id, "pdf_report_downloaded", {"run_id": str(run_id)})
 
     return Response(
         content=pdf_bytes,
@@ -534,12 +550,7 @@ def delete_run(
     db.delete(run)
     db.commit()
     logger.info("Run deleted", extra={"run_id": str(run_id), "user_id": user_id})
-    if posthog_client:
-        posthog_client.capture(
-            user_id,
-            "run_deleted",
-            properties={"run_status": run_status},
-        )
+    posthog_capture(user_id, "run_deleted", {"run_status": run_status})
     return None
 
 
@@ -551,8 +562,10 @@ def delete_run(
 @app.get("/api/consent", response_model=ConsentStatusResponse)
 def get_consent_status(
     db: Session = Depends(get_db),
-    user_id: str = Depends(get_current_user),
+    auth_user_id: str | None = Depends(get_optional_user),
+    x_anon_id: str | None = Header(default=None, alias="X-Anon-Id"),
 ):
+    user_id = anon.resolve_user_id(auth_user_id, x_anon_id)
     record = consent.get_consent(db, user_id)
     return ConsentStatusResponse(
         policy_version=consent.PRIVACY_POLICY_VERSION,
@@ -565,8 +578,10 @@ def get_consent_status(
 def accept_consent(
     body: ConsentAcceptRequest,
     db: Session = Depends(get_db),
-    user_id: str = Depends(get_current_user),
+    auth_user_id: str | None = Depends(get_optional_user),
+    x_anon_id: str | None = Header(default=None, alias="X-Anon-Id"),
 ):
+    user_id = anon.resolve_user_id(auth_user_id, x_anon_id)
     # Reject consent to any version other than the current one — a stale client
     # must reload and re-present the current policy, not log outdated consent.
     if body.policy_version != consent.PRIVACY_POLICY_VERSION:
@@ -582,17 +597,32 @@ def accept_consent(
         "Consent recorded",
         extra={"user_id": user_id, "policy_version": body.policy_version},
     )
-    if posthog_client:
-        posthog_client.capture(
-            user_id,
-            "consent_accepted",
-            properties={"policy_version": body.policy_version},
-        )
+    posthog_capture(user_id, "consent_accepted", {"policy_version": body.policy_version})
     return ConsentStatusResponse(
         policy_version=consent.PRIVACY_POLICY_VERSION,
         consented=True,
         consented_at=consented_at,
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/runs/claim — merge an anonymous visitor's run(s)/consent/free-scan
+# usage into their account right after signup (see backend/claim.py).
+# ---------------------------------------------------------------------------
+@app.post("/api/runs/claim", response_model=ClaimResponse)
+@limiter.limit("20/hour")
+def claim_run(
+    request: Request,
+    body: ClaimRequest,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    anon_id = anon.validate_anon_id(body.anon_id)
+    if anon_id is None:
+        raise HTTPException(400, "anon_id is required")
+    result = claim.claim_anonymous_account(db, anon_id, user_id)
+    posthog_capture(user_id, "anon_account_claimed", result._asdict())
+    return ClaimResponse(**result._asdict())
 
 
 # ---------------------------------------------------------------------------
@@ -745,8 +775,7 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
     )
     if failed:
         raise HTTPException(500, f"{failed} run(s) could not be fully deleted; awaiting retry")
-    if posthog_client:
-        posthog_client.capture(user_id, "account_deleted", properties={"runs_deleted": deleted})
+    posthog_capture(user_id, "account_deleted", {"runs_deleted": deleted})
     return {"received": True}
 
 

@@ -102,6 +102,7 @@ async function fetchApi<T>(
   path: string,
   options?: RequestInit & { cache?: RequestCache },
   token?: string,
+  anonId?: string,
 ): Promise<T> {
   const url = `${API_BASE}${path}`;
   const { cache, ...restOptions } = options ?? {};
@@ -109,7 +110,11 @@ async function fetchApi<T>(
     ...restOptions,
     ...(cache !== undefined && { cache }),
     headers: {
-      ...(token && { Authorization: `Bearer ${token}` }),
+      ...(token
+        ? { Authorization: `Bearer ${token}` }
+        : anonId
+          ? { "X-Anon-Id": anonId }
+          : {}),
       ...restOptions.headers,
     },
   });
@@ -126,9 +131,14 @@ async function fetchApi<T>(
   return res.json() as Promise<T>;
 }
 
-/** Create a run. Requires a valid Clerk Bearer token. */
-export async function createRun(formData: FormData, token: string): Promise<RunCreated> {
-  return fetchApi<RunCreated>("/api/runs", { method: "POST", body: formData }, token);
+/** Create a run. Requires either a valid Clerk Bearer token or an anon id
+ * (see backend/anon.py — anonymous visitors get one free scan). */
+export async function createRun(
+  formData: FormData,
+  token?: string,
+  anonId?: string,
+): Promise<RunCreated> {
+  return fetchApi<RunCreated>("/api/runs", { method: "POST", body: formData }, token, anonId);
 }
 
 /**
@@ -137,13 +147,18 @@ export async function createRun(formData: FormData, token: string): Promise<RunC
  */
 export function createRunWithProgress(
   formData: FormData,
-  token: string,
+  token: string | undefined,
+  anonId: string | undefined,
   onUploadProgress: (pct: number) => void,
 ): Promise<RunCreated> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${API_BASE}/api/runs`);
-    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    if (token) {
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    } else if (anonId) {
+      xhr.setRequestHeader("X-Anon-Id", anonId);
+    }
 
     xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable) {
@@ -218,20 +233,43 @@ export async function deleteRun(id: string, token: string): Promise<boolean> {
   }
 }
 
-/** Whether the current user has accepted the current privacy-policy version. */
-export async function getConsentStatus(token: string): Promise<ConsentStatus> {
-  return fetchApi<ConsentStatus>("/api/consent", undefined, token);
+/** Whether the current user (or anonymous visitor) has accepted the current
+ * privacy-policy version. */
+export async function getConsentStatus(token?: string, anonId?: string): Promise<ConsentStatus> {
+  return fetchApi<ConsentStatus>("/api/consent", undefined, token, anonId);
 }
 
 /** Record consent to the given policy version. 409 (code "stale_policy_version")
  * means the policy changed since the page loaded — reload and re-present it. */
-export async function recordConsent(policyVersion: string, token: string): Promise<ConsentStatus> {
+export async function recordConsent(
+  policyVersion: string,
+  token?: string,
+  anonId?: string,
+): Promise<ConsentStatus> {
   return fetchApi<ConsentStatus>(
     "/api/consent",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ policy_version: policyVersion }),
+    },
+    token,
+    anonId,
+  );
+}
+
+/** Merge an anonymous visitor's run(s)/consent/free-scan usage into the now
+ * signed-in user's account. Idempotent — safe to call more than once. */
+export async function claimAnonymousRuns(
+  anonId: string,
+  token: string,
+): Promise<{ claimed_runs: number; consent_claimed: boolean; free_scans_merged: number }> {
+  return fetchApi(
+    "/api/runs/claim",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ anon_id: anonId }),
     },
     token,
   );

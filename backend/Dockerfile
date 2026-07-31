@@ -14,7 +14,14 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 
 RUN mkdir -p /tmp/matplotlib /tmp/fontconfig
 
-RUN useradd --no-create-home --shell /bin/false appuser && chown -R appuser /app
+# Pre-create the local-storage mount point owned by appuser: Docker seeds a
+# named volume from whatever exists at its mount path in the image on first
+# attach, so this is what makes /data/local_storage writable by appuser
+# instead of defaulting to root ownership (see docker-compose.yml's
+# local_storage volume, used only in local dev — prod uses R2).
+RUN mkdir -p /data/local_storage && \
+    useradd --no-create-home --shell /bin/false appuser && \
+    chown -R appuser /app /data/local_storage
 USER appuser
 
 ENV PYTHONPATH=/app

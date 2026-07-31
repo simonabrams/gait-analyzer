@@ -7,8 +7,12 @@ import FeedbackCards from "@/components/FeedbackCards";
 import ShareButton from "@/components/ShareButton";
 import PdfReportButton from "@/components/PdfReportButton";
 import AccuracyBanner from "@/components/AccuracyBanner";
+import ClaimBanner from "@/components/ClaimBanner";
 
-type Props = { params: Promise<{ id: string }> };
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ justCreated?: string }>;
+};
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
@@ -53,8 +57,9 @@ function formatDate(dateStr: string | null): string | null {
   return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
-export default async function RunResultPage({ params }: Props) {
+export default async function RunResultPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const { justCreated } = await searchParams;
   let run;
   try {
     run = await getRun(id);
@@ -96,6 +101,8 @@ export default async function RunResultPage({ params }: Props) {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-10">
+
+      <ClaimBanner show={justCreated === "1"} />
 
       {/* Page header */}
       <div className="flex flex-wrap items-start justify-between gap-4">

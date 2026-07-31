@@ -62,6 +62,16 @@ class ConsentAcceptRequest(BaseModel):
     policy_version: str
 
 
+class ClaimRequest(BaseModel):
+    anon_id: str
+
+
+class ClaimResponse(BaseModel):
+    claimed_runs: int
+    consent_claimed: bool
+    free_scans_merged: int
+
+
 class CheckoutRequest(BaseModel):
     plan: Literal["monthly", "yearly"]
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { useAuth, SignInButton } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import {
   ApiError,
   createRunWithProgress,
@@ -10,6 +10,13 @@ import {
   getRunStatus,
   recordConsent,
 } from "@/lib/api";
+import { getOrCreateAnonId } from "@/lib/anon";
+import {
+  cmToFeetInches,
+  feetInchesToCm,
+  isHeightInRange,
+  type HeightUnit,
+} from "@/lib/height";
 import ConsentModal from "@/components/ConsentModal";
 import UpgradeModal from "@/components/UpgradeModal";
 import posthog from "posthog-js";
@@ -31,12 +38,20 @@ export default function VideoUploader({
 }: {
   onComplete: (runId: string) => void;
 }) {
-  const [height, setHeight] = useState(() => {
+  const [heightCm, setHeightCm] = useState(() => {
     if (typeof window === "undefined") return 175;
     const saved = localStorage.getItem("gait_height_cm");
     const parsed = saved ? Number(saved) : NaN;
     return isFinite(parsed) && parsed >= 100 && parsed <= 250 ? parsed : 175;
   });
+  const [heightUnit, setHeightUnit] = useState<HeightUnit>(() => {
+    if (typeof window === "undefined") return "cm";
+    return localStorage.getItem("gait_height_unit") === "ftin" ? "ftin" : "cm";
+  });
+  const [feetInches, setFeetInches] = useState(() => cmToFeetInches(heightCm));
+  const heightError = isHeightInRange(heightCm)
+    ? null
+    : `Height must be between 100–250 cm (about 3'3″–8'2″).`;
   const [file, setFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [processingProgress, setProcessingProgress] = useState<number | null>(null);
@@ -57,6 +72,25 @@ export default function VideoUploader({
       if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
     };
   }, []);
+
+  const selectHeightUnit = (unit: HeightUnit) => {
+    setHeightUnit(unit);
+    localStorage.setItem("gait_height_unit", unit);
+    if (unit === "ftin") setFeetInches(cmToFeetInches(heightCm));
+  };
+
+  const updateFeetInches = (feet: number, inches: number) => {
+    let f = Math.max(0, Math.round(feet) || 0);
+    let i = Math.max(0, Math.round(inches) || 0);
+    if (i >= 12) {
+      f += Math.floor(i / 12);
+      i = i % 12;
+    }
+    setFeetInches({ feet: f, inches: i });
+    const cm = feetInchesToCm(f, i);
+    setHeightCm(cm);
+    localStorage.setItem("gait_height_cm", String(cm));
+  };
 
   const onDrop = useCallback((accepted: File[]) => {
     setFile(accepted[0] ?? null);
@@ -81,9 +115,9 @@ export default function VideoUploader({
     setError(null);
     if (!consentOk) {
       try {
-        const token = await getToken();
-        if (!token) throw new Error("Not signed in");
-        const consentStatus = await getConsentStatus(token);
+        const token = isSignedIn ? await getToken() : null;
+        const anonId = token ? undefined : getOrCreateAnonId();
+        const consentStatus = await getConsentStatus(token ?? undefined, anonId);
         setPolicyVersion(consentStatus.policy_version);
         if (!consentStatus.consented) {
           setConsentError(null);
@@ -103,10 +137,11 @@ export default function VideoUploader({
     setConsentBusy(true);
     setConsentError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error("Not signed in");
-      const version = policyVersion ?? (await getConsentStatus(token)).policy_version;
-      await recordConsent(version, token);
+      const token = isSignedIn ? await getToken() : null;
+      const anonId = token ? undefined : getOrCreateAnonId();
+      const version =
+        policyVersion ?? (await getConsentStatus(token ?? undefined, anonId)).policy_version;
+      await recordConsent(version, token ?? undefined, anonId);
       setConsentOk(true);
       setShowConsent(false);
       await startUpload();
@@ -134,17 +169,17 @@ export default function VideoUploader({
     try {
       const form = new FormData();
       form.append("file", file);
-      form.append("height_cm", String(height));
+      form.append("height_cm", String(heightCm));
       const referralCode = localStorage.getItem("gait_referral_code");
       if (referralCode) form.append("referral_code", referralCode);
 
       // Use a longer-lived JWT template (10 min) so the token doesn't expire
       // mid-upload for large files on slow connections. The default session
       // token is only 60s, which isn't enough for multi-minute uploads.
-      const token = await getToken({ template: "upload" });
-      if (!token) throw new Error("Not signed in");
+      const token = isSignedIn ? await getToken({ template: "upload" }) : null;
+      const anonId = token ? undefined : getOrCreateAnonId();
 
-      const { run_id } = await createRunWithProgress(form, token, (pct) => {
+      const { run_id } = await createRunWithProgress(form, token ?? undefined, anonId, (pct) => {
         setUploadProgress(pct);
       });
 
@@ -217,19 +252,71 @@ export default function VideoUploader({
         )}
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-200 mb-1">Height (cm)</label>
-        <input
-          type="number"
-          min={100}
-          max={250}
-          value={height}
-          onChange={(e) => {
-            const val = Number(e.target.value);
-            setHeight(val);
-            localStorage.setItem("gait_height_cm", String(val));
-          }}
-          className="border border-white/20 rounded-lg px-3 py-2 w-24 bg-white/10 text-white"
-        />
+        <div className="flex items-center justify-between mb-1">
+          <label className="block text-sm font-medium text-gray-200">Height</label>
+          <div className="inline-flex rounded-lg overflow-hidden border border-white/20 text-xs">
+            {(["cm", "ftin"] as const).map((u) => (
+              <button
+                key={u}
+                type="button"
+                onClick={() => selectHeightUnit(u)}
+                className={`px-2.5 py-1 transition-colors ${
+                  heightUnit === u
+                    ? "bg-primary text-background font-semibold"
+                    : "bg-white/10 text-gray-300 hover:bg-white/20"
+                }`}
+              >
+                {u === "cm" ? "cm" : "ft/in"}
+              </button>
+            ))}
+          </div>
+        </div>
+        {heightUnit === "cm" ? (
+          <input
+            type="number"
+            min={100}
+            max={250}
+            value={heightCm}
+            onChange={(e) => {
+              const val = Number(e.target.value);
+              setHeightCm(val);
+              localStorage.setItem("gait_height_cm", String(val));
+            }}
+            className={`border rounded-lg px-3 py-2 w-24 bg-white/10 text-white ${
+              heightError ? "border-red-400/60" : "border-white/20"
+            }`}
+          />
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                min={3}
+                max={8}
+                value={feetInches.feet}
+                onChange={(e) => updateFeetInches(Number(e.target.value), feetInches.inches)}
+                className={`border rounded-lg px-3 py-2 w-16 bg-white/10 text-white ${
+                  heightError ? "border-red-400/60" : "border-white/20"
+                }`}
+              />
+              <span className="text-gray-400 text-sm">ft</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                min={0}
+                max={11}
+                value={feetInches.inches}
+                onChange={(e) => updateFeetInches(feetInches.feet, Number(e.target.value))}
+                className={`border rounded-lg px-3 py-2 w-16 bg-white/10 text-white ${
+                  heightError ? "border-red-400/60" : "border-white/20"
+                }`}
+              />
+              <span className="text-gray-400 text-sm">in</span>
+            </div>
+          </div>
+        )}
+        {heightError && <p className="text-red-400 text-xs mt-1">{heightError}</p>}
       </div>
       {preprocessingWarning && (
         <div className="rounded-lg border border-amber-400/50 bg-amber-400/10 px-4 py-3 text-amber-300 text-sm">
@@ -273,25 +360,14 @@ export default function VideoUploader({
         </div>
       )}
       {error && <p className="text-red-400 text-sm">{error}</p>}
-      {isSignedIn ? (
-        <button
-          type="button"
-          onClick={submit}
-          disabled={!file || isActive}
-          className="w-full py-3 bg-primary text-background font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-        >
-          Analyze
-        </button>
-      ) : (
-        <SignInButton mode="modal">
-          <button
-            type="button"
-            className="w-full py-3 bg-primary text-background font-semibold rounded-lg hover:opacity-90 transition-opacity"
-          >
-            Sign in to Analyze
-          </button>
-        </SignInButton>
-      )}
+      <button
+        type="button"
+        onClick={submit}
+        disabled={!file || isActive || !!heightError}
+        className="w-full py-3 bg-primary text-background font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+      >
+        Analyze
+      </button>
       {upgradeCode && (
         <UpgradeModal code={upgradeCode} source="upload_blocked" onClose={() => setUpgradeCode(null)} />
       )}

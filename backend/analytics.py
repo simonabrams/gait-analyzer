@@ -22,5 +22,10 @@ if _POSTHOG_TOKEN:
 
 
 def capture(user_id: str, event: str, properties: dict | None = None) -> None:
+    # posthog>=6 moved `event` to the sole positional arg and made distinct_id/
+    # properties keyword-only (capture(event, distinct_id=..., properties=...)) —
+    # a breaking change from the v3.x API this call site was originally written
+    # against. Route all capture() calls through this one wrapper so a future
+    # SDK signature change only needs fixing here.
     if posthog_client:
-        posthog_client.capture(user_id, event, properties=properties or {})
+        posthog_client.capture(event, distinct_id=user_id, properties=properties or {})

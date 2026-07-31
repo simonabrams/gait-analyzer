@@ -14,7 +14,7 @@ import celery.exceptions
 import sentry_sdk
 from sentry_sdk.integrations.celery import CeleryIntegration
 
-from backend.analytics import posthog_client
+from backend.analytics import capture as posthog_capture
 from backend.database import get_db_session
 from backend.job_runner import run_analysis
 from backend.models import Run, RunStatus, Subscription, SubscriptionTier
@@ -205,15 +205,13 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
 
         _grant_referral_bonus_if_eligible(db, run)
 
-        if posthog_client and run.user_id:
+        if run.user_id:
             # Product-usage signals only — no body measurements or gait metrics
             # in analytics (see /privacy: "pages viewed, features used").
-            posthog_client.capture(
+            posthog_capture(
                 run.user_id,
                 "run_completed",
-                properties={
-                    "flags_count": len((out["results"] or {}).get("flags") or []),
-                },
+                {"flags_count": len((out["results"] or {}).get("flags") or [])},
             )
 
         for p in out.get("temp_paths") or []:
@@ -223,21 +221,13 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
                 pass
     except celery.exceptions.SoftTimeLimitExceeded:
         _mark_failed(db, run, "Analysis timed out (video may be too long or complex). Please try a shorter clip.")
-        if posthog_client and run.user_id:
-            posthog_client.capture(
-                run.user_id,
-                "run_failed",
-                properties={"error_type": "timeout"},
-            )
+        if run.user_id:
+            posthog_capture(run.user_id, "run_failed", {"error_type": "timeout"})
         raise
     except Exception as e:
         _mark_failed(db, run, str(e))
-        if posthog_client and run.user_id:
-            posthog_client.capture(
-                run.user_id,
-                "run_failed",
-                properties={"error_type": type(e).__name__},
-            )
+        if run.user_id:
+            posthog_capture(run.user_id, "run_failed", {"error_type": type(e).__name__})
         raise
     finally:
         _current_run_id = None
