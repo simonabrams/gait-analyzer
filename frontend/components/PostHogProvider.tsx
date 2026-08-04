@@ -45,6 +45,10 @@ export default function PostHogProvider({
       api_host:
         process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com",
       capture_pageview: false,
+      // Pageviews are captured manually (see PostHogPageview below) since we're
+      // on the App Router, so $pageleave needs to be opted in explicitly too —
+      // it defaults to mirroring capture_pageview otherwise.
+      capture_pageleave: true,
     });
   }, []);
 
