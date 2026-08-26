@@ -427,7 +427,9 @@ def _check_cadence_confidence(summary, flags):
             "threshold": CADENCE_CONFIDENCE_LOW_THRESHOLD,
             "recommendation": (
                 f"Cadence measurement confidence is low ({conf:.2f}). "
-                "Results may be unreliable. Consider using a higher frame rate "
-                "camera or ensuring ankles are clearly visible throughout the run."
+                "Results may be unreliable. This is usually a low frame rate, ankles "
+                "that are hard to see throughout the clip, or a shaky/handheld camera — "
+                "filming from a fixed, braced position (rather than jogging alongside "
+                "the runner) usually fixes it."
             ),
         })

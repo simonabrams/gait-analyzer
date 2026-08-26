@@ -108,8 +108,8 @@ export default function HomeClient() {
             </div>
           </div>
           <p className="mt-5 text-sm text-gray-500 text-center">
-            💡 Best results: film from the side, full body visible, 30–60 seconds of steady
-            running on a treadmill
+            💡 Best results: film from the side, full body visible, 10–15 seconds of steady
+            running — treadmill or outdoors both work
           </p>
           {hasRuns && (
             <p className="mt-3 text-center">
@@ -132,7 +132,7 @@ export default function HomeClient() {
           {/* Mobile: vertical step list */}
           <div className="md:hidden space-y-4">
             {[
-              { n: 1, title: "Film your run", body: "30–60 sec from the side, on a treadmill. Your phone works great." },
+              { n: 1, title: "Film your run", body: "10–15 sec from the side — treadmill or outdoors. Just keep the camera steady." },
               { n: 2, title: "Upload your video", body: "Drop it in and tell us your height. That's all we need." },
               { n: 3, title: "Get your analysis", body: "See cadence, stride, posture — and what to work on next." },
             ].map(({ n, title, body }) => (
@@ -172,7 +172,7 @@ export default function HomeClient() {
                 <div className="bg-black/70 backdrop-blur-sm rounded-xl p-4 border border-white/10">
                   <h3 className="font-semibold text-white text-base mb-1">Film your run</h3>
                   <p className="text-gray-300 text-sm leading-relaxed">
-                    30–60 sec from the side, on a treadmill. Your phone works great.
+                    10–15 sec from the side — treadmill or outdoors. Just keep the camera steady.
                   </p>
                 </div>
               </div>

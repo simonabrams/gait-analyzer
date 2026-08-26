@@ -227,9 +227,15 @@ export default async function RunResultPage({ params, searchParams }: Props) {
                 },
                 {
                   icon: "⏱️",
-                  title: "Give it at least 20–30 seconds",
+                  title: "Aim for 10–15 seconds of steady running",
                   detail:
-                    "Shorter clips might not contain enough strides for a reliable analysis. A 30–60 second clip on a treadmill works best.",
+                    "Treadmill or outdoors both work — just trim out the first/last couple steps where you're speeding up or slowing down.",
+                },
+                {
+                  icon: "🤳",
+                  title: "Keep the camera steady",
+                  detail:
+                    "A tripod or bracing your phone against something works best. If a friend is filming outdoors, have them stand still rather than jog alongside you — a shaky shot mostly throws off the bounce measurement.",
                 },
               ].map(({ icon, title, detail }) => (
                 <li key={title} className="flex items-start gap-3">
