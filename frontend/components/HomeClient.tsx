@@ -213,7 +213,7 @@ export default function HomeClient() {
         </div>
       </section>
 
-      {/* Testimonial */}
+      {/* Value prop banner (placeholder for a future real testimonial) */}
       <section
         className="py-28 relative overflow-hidden"
         style={{
@@ -224,13 +224,10 @@ export default function HomeClient() {
       >
         <div className="absolute inset-0 bg-black/75" />
         <div className="relative z-10 max-w-3xl mx-auto px-6 text-center">
-          <blockquote className="text-2xl md:text-3xl font-medium text-white leading-relaxed italic">
-            &ldquo;Finally an app that tells me{" "}
-            <span className="text-primary not-italic font-semibold">why</span>{" "}
-            my knee hurts — not just that it does.&rdquo;
-          </blockquote>
-          <p className="mt-6 text-xs font-semibold tracking-[0.2em] uppercase text-gray-400">
-            — Marathon Runner, Berlin
+          <p className="text-2xl md:text-3xl font-medium text-white leading-relaxed">
+            Your stride,{" "}
+            <span className="text-primary font-semibold">decoded</span>{" "}
+            — cadence, posture, and the patterns behind them, laid out clearly after every run.
           </p>
         </div>
       </section>
