@@ -6,14 +6,14 @@
 
 ---
 
-## 1. First-upload consent (BUILT 2026-07-25, anon age checkbox added 2026-08-27 — copy pending legal review)
+## 1. First-upload consent (BUILT 2026-07-25, age checkbox added 2026-08-27, extended to all users 2026-08-27 — copy pending legal review)
 
 **Where:** `ConsentModal`, shown on the first Analyze click (and whenever
 `PRIVACY_POLICY_VERSION` is bumped). Consent is logged server-side in
-`consent_records` (user, policy version, age confirmation if anonymous,
-timestamp) and enforced by `POST /api/runs` (403 `consent_required`). The
-modal links to `/privacy` and `/terms`, which **do not exist yet** — those
-pages must ship before this does.
+`consent_records` (user, policy version, age confirmation, timestamp) and
+enforced by `POST /api/runs` (403 `consent_required`). The modal links to
+`/privacy` and `/terms`, which **do not exist yet** — those pages must ship
+before this does.
 
 > ### Before your first analysis
 >
@@ -28,19 +28,22 @@ pages must ship before this does.
 > [Terms](/terms), and I consent to Runlens processing my video and the
 > body-movement measurements derived from it.
 >
-> ☐ *(anonymous visitors only)* I'm 18 or older.
+> ☐ I'm 18 or older.
 >
 > **[Agree & continue]**  ·  [Not now]
 
-**Anonymous-only age checkbox (BUILT 2026-08-27):** shown only when there's no
-Clerk session — a signed-in user has no equivalent prompt today (account
-creation is assumed to imply it; see gap analysis #10 — that assumption itself
-isn't enforced anywhere and remains open). Both checkboxes are required to
-continue. `POST /api/consent` rejects anonymous consent missing the
-confirmation (400 `age_confirmation_required`) — this is enforced
-server-side, not just gated in the UI. Persisted as `age_confirmed` on the
-`consent_records` row (null for authenticated consent, where it isn't
-collected).
+**Age checkbox (anon-only BUILT 2026-08-27, extended to signed-in users the
+same day):** shown for every user, signed in or not — nothing upstream of
+this (Clerk sign-up included) establishes age today, so account creation was
+never actually a valid basis for the old "you must be 18 to create an
+account" framing (see gap analysis #10, now closed). Both checkboxes are
+required to continue. `POST /api/consent` rejects consent missing the
+confirmation (400 `age_confirmation_required`) for every caller — this is
+enforced server-side, not just gated in the UI. Persisted as `age_confirmed`
+on the `consent_records` row (null only for rows recorded before this
+requirement existed). Extending it to signed-in users required bumping
+`PRIVACY_POLICY_VERSION` again (to `2026-08-27-draft`) so already-consented
+accounts get re-prompted — see item 10 below (re-consent on policy change).
 
 **[LEGAL REVIEW — the checkbox sentence is the load-bearing consent language,
 especially re: biometric-derived data. Counsel decides if it must be a

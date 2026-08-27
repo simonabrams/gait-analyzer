@@ -102,16 +102,26 @@ No endpoint or UI. Fine to sequence post-launch per the outline, but the
 rights section of the policy (§12) references it — keep the [CONFIRM] marker
 until built.
 
-### 10. No age gate / minors stance — PARTIAL, anon path built 2026-08-27
-`ConsentModal` now shows a required "I'm 18 or older" checkbox for anonymous
-visitors, enforced server-side (`POST /api/consent` 400
-`age_confirmation_required` if missing) and persisted on the consent record.
-`/privacy`'s Age section covers both paths. Remaining: this is
-self-attestation, not verified age assurance — a **[LEGAL REVIEW]** question.
-Signed-in users still have no equivalent prompt anywhere in the Clerk
-sign-up flow; the policy's "18 to create an account" line is stated but not
-enforced. **[DECIDE]** whether that gap needs closing too, or whether
-account creation is an acceptable implicit assumption.
+### 10. No age gate / minors stance — CLOSED (self-attestation) 2026-08-27
+`ConsentModal` shows a required "I'm 18 or older" checkbox for every user —
+signed in or not — enforced server-side (`POST /api/consent` 400
+`age_confirmation_required` if missing) and persisted on the consent record
+(`age_confirmed`). `/privacy`'s Age section states this applies to everyone,
+not just account creation. `PRIVACY_POLICY_VERSION` was bumped to
+`2026-08-27-draft` so already-consented accounts get re-prompted rather than
+grandfathering in unconfirmed rows.
+
+Originally shipped anonymous-only (same day), on the reasoning that account
+creation implicitly established age — that assumption was never actually
+enforced anywhere in the Clerk sign-up flow, so it was closed the same day
+rather than left as a stated-but-untrue policy line.
+
+Remaining: this is self-attestation, not verified age assurance — a
+**[LEGAL REVIEW]** question. A stronger gate (blocking account creation
+itself via Clerk's legal-consent feature, or a custom sign-up form) is
+possible but requires Clerk Dashboard configuration outside this repo, or a
+larger rebuild of the sign-up flow — **[DECIDE]** whether self-attestation
+at first use is sufficient or a harder gate at sign-up is worth it.
 
 ### 11. Smaller items
 - AI-training stance ("we don't train on your video") is true but stated

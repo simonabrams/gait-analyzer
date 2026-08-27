@@ -259,11 +259,10 @@ export default function PrivacyPage() {
 
           <Section title="Age">
             <p>
-              Runlens is for adults: you must be at least 18 to use Runlens, whether
-              or not you create an account. If you use Runlens without an account,
-              we ask you to confirm this before your scan is processed. We
-              don&apos;t knowingly collect data from anyone younger; if we learn we
-              have, we&apos;ll delete it.
+              Runlens is for adults: you must be at least 18 to use Runlens. We ask
+              every user — signed in or not — to confirm this before their first
+              scan is processed. We don&apos;t knowingly collect data from anyone
+              younger; if we learn we have, we&apos;ll delete it.
             </p>
           </Section>
 

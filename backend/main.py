@@ -597,11 +597,10 @@ def accept_consent(
                 "message": "The privacy policy has been updated. Please reload and review the current version.",
             },
         )
-    # Anonymous visitors never went through Clerk sign-up, so nothing has
-    # implied they're 18+ — the checkbox is required server-side, not just
-    # gated in the UI. Signed-in users aren't asked (see ConsentModal).
-    is_anonymous = auth_user_id is None
-    if is_anonymous and not body.age_confirmed:
+    # Required of every user, signed in or not — nothing upstream of this
+    # (Clerk sign-up included) establishes age today. Enforced server-side,
+    # not just gated in the UI (see ConsentModal).
+    if not body.age_confirmed:
         raise HTTPException(
             status_code=400,
             detail={
@@ -610,7 +609,7 @@ def accept_consent(
             },
         )
     consented_at = consent.record_consent(
-        db, user_id, body.policy_version, age_confirmed=body.age_confirmed if is_anonymous else None
+        db, user_id, body.policy_version, age_confirmed=body.age_confirmed
     )
     logger.info(
         "Consent recorded",

@@ -52,9 +52,9 @@ class ConsentRecord(Base):
     user_id = Column(String(255), nullable=False, index=True)
     # Version identifier of the policy text consented to (see backend/consent.py).
     policy_version = Column(String(64), nullable=False)
-    # Self-reported 18+ affirmation, required for anonymous consent (no Clerk
-    # account to have already implied it). Null for rows recorded before this
-    # column existed, and for authenticated consent where it isn't collected.
+    # Self-reported 18+ affirmation, required of every user (signed in or
+    # not) as of PRIVACY_POLICY_VERSION 2026-08-27-draft. Null for rows
+    # recorded before this requirement existed.
     age_confirmed = Column(Boolean, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 

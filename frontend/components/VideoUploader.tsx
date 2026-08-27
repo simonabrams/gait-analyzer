@@ -380,7 +380,6 @@ export default function VideoUploader({
           onClose={() => setShowConsent(false)}
           busy={consentBusy}
           error={consentError}
-          isAnonymous={!isSignedIn}
         />
       )}
     </div>

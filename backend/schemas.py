@@ -60,8 +60,8 @@ class ConsentStatusResponse(BaseModel):
 
 class ConsentAcceptRequest(BaseModel):
     policy_version: str
-    # Required (must be True) when consenting anonymously — there's no Clerk
-    # account to have already implied it. Ignored for authenticated consent.
+    # Required (must be True) for every user, signed in or not — nothing
+    # upstream of this establishes age today.
     age_confirmed: bool = False
 
 
