@@ -320,7 +320,7 @@ export default function VideoUploader({
       </div>
       {preprocessingWarning && (
         <div className="rounded-lg border border-amber-400/50 bg-amber-400/10 px-4 py-3 text-amber-300 text-sm">
-          Your video was trimmed to 3 minutes for processing. For best results, upload a 30–60 second clip.
+          Your video was trimmed to 3 minutes for processing. For best results, upload a 10–15 second clip of steady running.
         </div>
       )}
       {uploadProgress !== null && (
