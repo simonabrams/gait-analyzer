@@ -456,6 +456,18 @@ def get_run_report_pdf(
         raise HTTPException(404, "Run not found")
     if run.status != RunStatus.complete:
         raise HTTPException(400, "Run is not complete yet")
+    # No usable summary — either a confidence-gate hard fail (see
+    # backend/confidence_gate.py) or an older zero-stride run. Either way
+    # there's nothing trustworthy to put in a PDF; generating one anyway
+    # would report "no issues flagged" for a run that was never measured.
+    if not (run.results_json or {}).get("summary"):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "insufficient_data",
+                "message": "This run doesn't have enough reliable data for a PDF report.",
+            },
+        )
 
     sub = billing.get_or_create_subscription(db, user_id)
     if not billing.has_active_access(sub):

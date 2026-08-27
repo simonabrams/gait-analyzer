@@ -29,7 +29,12 @@ export default function PdfReportButton({ runId }: { runId: string }) {
       URL.revokeObjectURL(url);
       posthog.capture("pdf_report_downloaded");
     } catch (e) {
-      if (e instanceof ApiError && e.code) {
+      if (e instanceof ApiError && e.code === "insufficient_data") {
+        // Not a billing gate — the run doesn't have enough reliable data for
+        // a PDF (see main.py's report.pdf endpoint). Plain message, not the
+        // "upgrade to Pro" modal.
+        setError(e.message || "This run doesn't have enough reliable data for a PDF report.");
+      } else if (e instanceof ApiError && e.code) {
         setUpgradeCode(e.code);
       } else {
         setError(e instanceof Error ? e.message : "Could not generate PDF report");

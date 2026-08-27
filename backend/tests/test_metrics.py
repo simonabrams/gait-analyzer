@@ -1,5 +1,5 @@
 """Unit tests for backend.metrics (compute_metrics). No file I/O, DB, or Redis."""
-from backend.metrics import compute_metrics
+from backend.metrics import _compute_summary, compute_metrics
 
 # MediaPipe-style indices
 LEFT_HIP, RIGHT_HIP = 23, 24
@@ -301,3 +301,56 @@ def test_knee_flexion_low_triggers_too_straight_heuristic_flag():
     flags = evaluate_heuristics(result)
     metrics_flagged = {f["metric"] for f in flags}
     assert "knee_flexion_at_strike" in metrics_flagged, flags
+
+
+# ---- Aggregation robustness: outlier rejection + median (Part 2) ----
+# These test _compute_summary directly rather than through the full
+# pose-frame -> detection pipeline: a genuine 360 spm stride right next to
+# genuine 180 spm ones is exactly the kind of closely-spaced spurious
+# detection _suppress_close_peaks (see above) already prevents from ever
+# reaching _build_strides in real footage. The aggregation robustness this
+# covers is a second, independent line of defense — for outliers that *do*
+# pass detection (e.g. one frame's landmarks are briefly wrong, corrupting
+# a single stride's reading without an implausible duration) — so it's
+# tested at the unit it actually lives in.
+def _stride(cadence, vertical_osc_cm=8.0, knee=25.0, foot=5.0, trunk=5.0):
+    return {
+        "cadence": cadence,
+        "vertical_osc_cm": vertical_osc_cm,
+        "knee_angle_strike_deg": knee,
+        "foot_strike_position_cm": foot,
+        "trunk_lean_deg": trunk,
+        "duration_sec": 120.0 / cadence,
+    }
+
+
+def test_outlier_strides_rejected_before_aggregating():
+    """[180,180,180,360,180,90,180] -> aggregate near 180, not the arithmetic
+    mean (~192.9 spm). The 360 and 90 spm strides' intervals deviate more
+    than _OUTLIER_DURATION_DEVIATION (40%) from the median interval and must
+    be dropped before aggregating."""
+    cadences = [180, 180, 180, 360, 180, 90, 180]
+    strides = [_stride(c) for c in cadences]
+    summary = _compute_summary(strides)
+    assert summary["cadence_avg"] == 180.0
+    assert summary["num_strides"] == 5, "360 and 90 spm strides should be rejected as outliers"
+    assert summary["num_strides_detected"] == 7
+
+
+def test_no_outlier_rejection_with_only_one_stride():
+    """A single stride can't deviate from 'the median' of itself — must not
+    be dropped for lack of company."""
+    summary = _compute_summary([_stride(180)])
+    assert summary["num_strides"] == 1
+    assert summary["cadence_avg"] == 180.0
+
+
+def test_normal_variation_is_not_treated_as_outliers():
+    """Realistic stride-to-stride cadence variation (well within 40% of the
+    median interval) must not be rejected — only genuinely implausible
+    spikes should be."""
+    cadences = [178, 182, 175, 180, 185, 179, 181]
+    strides = [_stride(c) for c in cadences]
+    summary = _compute_summary(strides)
+    assert summary["num_strides"] == len(cadences)
+    assert summary["num_strides_detected"] == len(cadences)

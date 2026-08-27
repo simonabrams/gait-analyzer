@@ -11,11 +11,45 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 
+from backend import confidence_gate
 from backend.dashboard import create_dashboard
 from backend.heuristics import evaluate_heuristics
 from backend.metrics import compute_metrics
 from backend.pose_extractor import extract_poses
 from backend.visualizer import annotate_single_frame, build_frame_to_stride_flags
+
+
+def apply_confidence_gate(results: dict):
+    """Decide whether `results` (a metrics.compute_metrics() output) is
+    trustworthy enough to report, and if not, blank out the parts that drive
+    coaching and every surface's "hasData" check. Returns (gate, results) —
+    results is mutated in place (and also returned, for convenience).
+
+    Pulled out of run_analysis as its own function, with no I/O, so it's
+    unit-testable without a real video/pose pipeline — see
+    backend/tests/test_job_runner.py.
+    """
+    gate = confidence_gate.evaluate(results.get("summary") or {})
+    results.setdefault("meta", {})["confidence_gate"] = {
+        "hard_fail": gate.hard_fail,
+        "low_confidence": gate.low_confidence,
+        "reason": gate.reason,
+        "reason_metric": gate.reason_metric,
+        "detected_stride_count": gate.detected_stride_count,
+        "usable_stride_count": gate.usable_stride_count,
+        "computed_cadence": gate.computed_cadence,
+        "user_message": gate.user_message,
+    }
+    if gate.hard_fail:
+        # Reuse the existing "couldn't measure your gait this time" path
+        # (empty summary is what the frontend already keys off of) rather
+        # than inventing a new state. strides/meta are kept (not shown to
+        # users) so the reason is debuggable later.
+        results["summary"] = {}
+        results["flags"] = []
+    else:
+        results["flags"] = evaluate_heuristics(results)
+    return gate, results
 
 
 def _sanitize_fps_for_writer(fps):
@@ -131,7 +165,12 @@ def run_analysis(
         results = compute_metrics(
             pose_frames, height_cm, fps, video_file=video_path.name
         )
-        results["flags"] = evaluate_heuristics(results)
+
+        # Single choke point: decide whether this run's data is trustworthy
+        # enough to report/coach on BEFORE any surface (annotated video,
+        # dashboard PNG, results_json that the web report and Pro PDF both
+        # read) is generated. See backend/confidence_gate.py.
+        gate, results = apply_confidence_gate(results)
         results_from_json = results
 
         report(50, "Generating annotated video...")
@@ -155,7 +194,8 @@ def run_analysis(
                 np.frombuffer(jpeg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR
             )
             img = annotate_single_frame(
-                frame, i, pose_by_idx, results_from_json, frame_flags
+                frame, i, pose_by_idx, results_from_json, frame_flags,
+                suppress_metrics_panel=gate.hard_fail,
             )
             if img is not None:
                 writer.write(img)
@@ -176,15 +216,19 @@ def run_analysis(
         )
         annotated_video_path = h264_path
 
-        report(70, "Building dashboard...")
-        fig = create_dashboard(results_from_json)
-        fd_d, dashboard_path = tempfile.mkstemp(
-            suffix=".png", prefix="gait_dashboard_"
-        )
-        os.close(fd_d)
-        temp_paths.append(dashboard_path)
-        fig.savefig(dashboard_path, dpi=150)
-        plt.close(fig)
+        dashboard_path = None
+        if gate.hard_fail:
+            report(70, "Skipping dashboard (low-confidence result)...")
+        else:
+            report(70, "Building dashboard...")
+            fig = create_dashboard(results_from_json)
+            fd_d, dashboard_path = tempfile.mkstemp(
+                suffix=".png", prefix="gait_dashboard_"
+            )
+            os.close(fd_d)
+            temp_paths.append(dashboard_path)
+            fig.savefig(dashboard_path, dpi=150)
+            plt.close(fig)
 
         if truncated and results_from_json.get("meta"):
             results_from_json["meta"]["truncated_frames"] = max_frames
@@ -198,6 +242,7 @@ def run_analysis(
             "temp_paths": temp_paths,
             "truncated": truncated,
             "frames_used": frames_used,
+            "gate": gate,
         }
     except Exception:
         for p in temp_paths:

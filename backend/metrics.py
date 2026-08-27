@@ -5,6 +5,7 @@ schema (summary, strides). No file I/O.
 """
 
 import math
+import statistics
 from datetime import datetime, timezone
 
 _STRIDE_MAX_SEC = 1.5
@@ -34,6 +35,13 @@ _NOSE_TO_ANKLE_FRACTION = 0.89
 _NOSE_TO_HIP_FRACTION = 0.46
 # Minimum ankle visibility score to prefer the head-to-ankle span.
 _ANKLE_VIS_THRESHOLD = 0.5
+
+# A stride whose interval (duration_sec) deviates more than this fraction from
+# the run's median interval is dropped before aggregating — see
+# _filter_outlier_strides. One bad foot-strike detection corrupts that one
+# stride's duration (and implied cadence) far more than real stride-to-stride
+# variation ever would.
+_OUTLIER_DURATION_DEVIATION = 0.40
 
 
 def compute_metrics(pose_frames, height_cm, fps, video_file=""):
@@ -68,7 +76,10 @@ def compute_metrics(pose_frames, height_cm, fps, video_file=""):
         ankle_vis.append(lm[RIGHT_ANKLE].get("visibility", 1.0))
     fps_score = min(fps / 60.0, 1.0)
     vis_score = sum(ankle_vis) / len(ankle_vis) if ankle_vis else 1.0
-    stride_score = min(len(strides) / 5.0, 1.0)
+    # num_strides is the post-outlier-filter "usable" count (see
+    # _compute_summary) — the count that actually informed the reported
+    # values, not the raw detection count.
+    stride_score = min(summary.get("num_strides", len(strides)) / 5.0, 1.0)
     summary["cadence_confidence"] = round((fps_score + vis_score + stride_score) / 3.0, 3)
 
     return {
@@ -463,19 +474,54 @@ def _trunk_lean_avg(stride_frames):
     return sum(angles) / len(angles) if angles else None
 
 
+def _filter_outlier_strides(strides):
+    """Drop strides whose interval (duration_sec) deviates more than
+    _OUTLIER_DURATION_DEVIATION from the run's median interval, before
+    aggregating anything. Always keeps at least one stride: the stride at
+    (or nearest) the median duration itself always has ~0% deviation, so it
+    can never be filtered out.
+    """
+    if len(strides) < 2:
+        return list(strides)
+    durations = [s["duration_sec"] for s in strides]
+    median_duration = statistics.median(durations)
+    if median_duration <= 0:
+        return list(strides)
+    kept = [
+        s for s in strides
+        if abs(s["duration_sec"] - median_duration) / median_duration <= _OUTLIER_DURATION_DEVIATION
+    ]
+    return kept or list(strides)
+
+
 def _compute_summary(strides):
     if not strides:
         return {}
-    cadences = [s["cadence"] for s in strides]
-    oscs = [s["vertical_osc_cm"] for s in strides]
-    knees = [s["knee_angle_strike_deg"] for s in strides if s.get("knee_angle_strike_deg") is not None]
-    foots = [s["foot_strike_position_cm"] for s in strides if s.get("foot_strike_position_cm") is not None]
-    trunks = [s["trunk_lean_deg"] for s in strides if s.get("trunk_lean_deg") is not None]
+    # Outlier rejection + median (not mean) aggregation: a single bad
+    # foot-strike detection (wrong duration, or a wrong per-frame landmark
+    # read) should not be able to drag a summary value away from what the
+    # run actually looked like the way an arithmetic mean can.
+    usable = _filter_outlier_strides(strides)
+
+    cadences = [s["cadence"] for s in usable]
+    oscs = [s["vertical_osc_cm"] for s in usable]
+    knees = [s["knee_angle_strike_deg"] for s in usable if s.get("knee_angle_strike_deg") is not None]
+    foots = [s["foot_strike_position_cm"] for s in usable if s.get("foot_strike_position_cm") is not None]
+    trunks = [s["trunk_lean_deg"] for s in usable if s.get("trunk_lean_deg") is not None]
+    # Whole units: the method doesn't support the false precision a decimal
+    # implies (see MetricCards' own "±~10% vs. lab-grade motion capture"
+    # disclaimer) — "91.4 spm" or "13.11 cm" overstates what this can tell
+    # you. round() with no ndigits returns a plain int for a float input.
     return {
-        "cadence_avg": round(sum(cadences) / len(cadences), 1),
-        "vertical_osc_avg_cm": round(sum(oscs) / len(oscs), 2),
-        "knee_angle_strike_avg_deg": round(sum(knees) / len(knees), 1) if knees else None,
-        "foot_strike_position_avg_cm": round(sum(foots) / len(foots), 2) if foots else None,
-        "trunk_lean_avg_deg": round(sum(trunks) / len(trunks), 1) if trunks else None,
-        "num_strides": len(strides),
+        "cadence_avg": round(statistics.median(cadences)),
+        "vertical_osc_avg_cm": round(statistics.median(oscs)),
+        "knee_angle_strike_avg_deg": round(statistics.median(knees)) if knees else None,
+        "foot_strike_position_avg_cm": round(statistics.median(foots)) if foots else None,
+        "trunk_lean_avg_deg": round(statistics.median(trunks)) if trunks else None,
+        # "Usable" = after outlier rejection — this is the count the gate
+        # (backend/confidence_gate.py) and confidence scoring key off of.
+        "num_strides": len(usable),
+        # Raw detection count before outlier rejection, kept for telemetry
+        # and for explaining a gate rejection to the user.
+        "num_strides_detected": len(strides),
     }

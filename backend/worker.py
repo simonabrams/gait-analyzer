@@ -51,16 +51,44 @@ app.conf.worker_concurrency = int(os.environ.get("CELERY_WORKER_CONCURRENCY", "1
 _current_run_id: str | None = None
 
 
+def _refund_free_scan(db, run: Run) -> None:
+    """For free-tier users, refund the free scan they were charged for at
+    upload time (see main.py's create_run) — a pipeline bug, or a confidence
+    gate rejection (see backend/confidence_gate.py), shouldn't burn a user's
+    one free shot. Does not commit; caller commits alongside its own changes."""
+    if not run.user_id:
+        return
+    sub = db.query(Subscription).filter(Subscription.user_id == run.user_id).first()
+    if sub and sub.tier == SubscriptionTier.free.value and sub.free_scans_used > 0:
+        sub.free_scans_used -= 1
+
+
 def _mark_failed(db, run: Run, error_message: str) -> None:
-    """Mark a run failed and, for free-tier users, refund the free scan they
-    were charged for — a pipeline bug shouldn't burn a user's one free shot."""
+    """Mark a run failed and refund its free scan (see _refund_free_scan)."""
     run.status = RunStatus.failed
     run.error_message = error_message
     run.progress_pct = 0
-    if run.user_id:
-        sub = db.query(Subscription).filter(Subscription.user_id == run.user_id).first()
-        if sub and sub.tier == SubscriptionTier.free.value and sub.free_scans_used > 0:
-            sub.free_scans_used -= 1
+    _refund_free_scan(db, run)
+    db.commit()
+
+
+def _finalize_run(db, run: Run, out: dict) -> None:
+    """Apply a completed run_analysis() output to the DB row. Split out from
+    process_video's body so it's testable without the video/R2/Celery
+    machinery around it: status stays 'complete' even on a confidence-gate
+    hard fail (see backend/confidence_gate.py) -- that's not a pipeline
+    error, it's "we couldn't measure this one", which routes to the
+    existing empty-summary "couldn't measure your gait" screen rather than
+    the generic failure screen _mark_failed's RunStatus.failed produces.
+    A hard fail still refunds the free scan, same reasoning as _mark_failed:
+    a rejected measurement isn't a paid analysis the user got value from."""
+    run.results_json = out["results"]
+    run.status = RunStatus.complete
+    run.progress_pct = 100
+    run.error_message = None
+    gate = out.get("gate")
+    if gate is not None and gate.hard_fail:
+        _refund_free_scan(db, run)
     db.commit()
 
 
@@ -189,19 +217,20 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
             max_width=max_width,
             target_fps=target_fps,
         )
+        gate = out.get("gate")
 
         ann_key = annotated_video_key(run_id)
-        dash_key = dashboard_image_key(run_id)
         upload_file(out["annotated_video_path"], ann_key)
-        upload_file(out["dashboard_path"], dash_key)
-
         run.annotated_video_r2_key = ann_key
-        run.dashboard_image_r2_key = dash_key
-        run.results_json = out["results"]
-        run.status = RunStatus.complete
-        run.progress_pct = 100
-        run.error_message = None
-        db.commit()
+
+        # A confidence-gate hard fail produces no dashboard PNG at all (see
+        # job_runner.run_analysis) -- nothing to upload or link.
+        if out.get("dashboard_path"):
+            dash_key = dashboard_image_key(run_id)
+            upload_file(out["dashboard_path"], dash_key)
+            run.dashboard_image_r2_key = dash_key
+
+        _finalize_run(db, run, out)
 
         _grant_referral_bonus_if_eligible(db, run)
 
@@ -213,6 +242,23 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
                 "run_completed",
                 {"flags_count": len((out["results"] or {}).get("flags") or [])},
             )
+            # Sized so we can tell how often the stride detector fails in
+            # production (see backend/confidence_gate.py) -- fired whenever
+            # the gate did anything, not just on a hard fail.
+            if gate is not None and (gate.hard_fail or gate.low_confidence):
+                posthog_capture(
+                    run.user_id,
+                    "run_confidence_gate",
+                    {
+                        "hard_fail": gate.hard_fail,
+                        "low_confidence": gate.low_confidence,
+                        "detected_stride_count": gate.detected_stride_count,
+                        "usable_stride_count": gate.usable_stride_count,
+                        "computed_cadence": gate.computed_cadence,
+                        "rejection_reason": gate.reason,
+                        "video_duration_sec": (preprocess_meta or {}).get("output_duration_sec"),
+                    },
+                )
 
         for p in out.get("temp_paths") or []:
             try:

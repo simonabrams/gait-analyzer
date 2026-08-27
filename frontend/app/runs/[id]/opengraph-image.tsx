@@ -59,6 +59,7 @@ export default async function Image({ params }: { params: { id: string } }) {
 
   const summary = run?.results?.summary;
   const flags = run?.results?.flags ?? [];
+  const hasData = summary != null && Object.keys(summary).length > 0;
 
   const cadenceVal = summary?.cadence_avg != null ? Number(summary.cadence_avg) : null;
   const vertOscVal = summary?.vertical_osc_avg_cm != null ? Number(summary.vertical_osc_avg_cm) : null;
@@ -82,10 +83,16 @@ export default async function Image({ params }: { params: { id: string } }) {
     },
   ];
 
+  // A run with no usable summary (confidence-gate hard fail, or an older
+  // zero-stride run) has zero flags too — that's "nothing was measured",
+  // not "no issues", so it must not read as a clean "no issues flagged".
   const flagCount = flags.length;
-  const statusColor = flagCount === 0 ? "#00C896" : "#f59e0b";
-  const statusText =
-    flagCount === 0 ? "✓  No issues flagged" : `${flagCount} issue${flagCount !== 1 ? "s" : ""} flagged`;
+  const statusColor = !hasData ? "#6b7280" : flagCount === 0 ? "#00C896" : "#f59e0b";
+  const statusText = !hasData
+    ? "Not enough data to measure"
+    : flagCount === 0
+      ? "✓  No issues flagged"
+      : `${flagCount} issue${flagCount !== 1 ? "s" : ""} flagged`;
 
   return new ImageResponse(
     (

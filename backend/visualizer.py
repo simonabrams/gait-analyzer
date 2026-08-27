@@ -126,7 +126,7 @@ def _draw_metrics_panel(img, lines, font_scale=0.55, thickness=1, padding=8, alp
         y0 += line_spacing
 
 
-def annotate_single_frame(frame, frame_idx, pose_by_idx, results, frame_flags=None):
+def annotate_single_frame(frame, frame_idx, pose_by_idx, results, frame_flags=None, suppress_metrics_panel=False):
     import cv2
     if frame is None:
         return None
@@ -151,6 +151,13 @@ def annotate_single_frame(frame, frame_idx, pose_by_idx, results, frame_flags=No
                 cv2.circle(img, pt, 6, (0, 0, 255), -1, cv2.LINE_AA)
             else:
                 cv2.circle(img, pt, 4, (0, 255, 0), -1, cv2.LINE_AA)
+
+    # A confidence-gate hard fail (see backend/confidence_gate.py) means these
+    # numbers aren't trustworthy -- burning them into the video pixels would
+    # undermine the whole point of not reporting them elsewhere. Skeleton
+    # overlay above is still drawn; only the numeric panel is suppressed.
+    if suppress_metrics_panel:
+        return img
 
     stride_at_frame = _stride_at_frame(frame_idx, strides)
     if stride_at_frame:
