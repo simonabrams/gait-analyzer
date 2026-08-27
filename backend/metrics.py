@@ -7,8 +7,13 @@ schema (summary, strides). No file I/O.
 import math
 from datetime import datetime, timezone
 
-_STRIDE_MIN_SEC = 0.25
 _STRIDE_MAX_SEC = 1.5
+# A stride (2 steps) shorter than this implies a cadence above ~250 spm —
+# beyond even elite sprint cadence, so a stride this short is almost always
+# a spurious extra foot-strike detection (motion blur, landmark jitter),
+# not a real one. Was 0.25s (≈480 spm ceiling), which let clearly-impossible
+# spikes through untouched — see the double-counting investigation below.
+_STRIDE_MIN_SEC = 0.48
 
 # Foot-strike detection tuning
 _VIS_THRESHOLD = 0.5    # MediaPipe ankle confidence below this → treat as missing
@@ -167,6 +172,36 @@ def _savgol_or_passthrough(ys, fps=30.0, window=None, polyorder=2):
     return [None if ys[i] is None else float(smoothed[i]) for i in range(len(ys))]
 
 
+def _suppress_close_peaks(peaks, values, min_distance):
+    """Non-max suppression: drop any peak within min_distance frames of an
+    already-kept one, keeping whichever has the higher raw signal value.
+
+    Each candidate peak is independently snapped to its local raw maximum
+    within ±_STRIKE_RADIUS to correct small smoothing-induced shifts (see
+    find_maxima) — but that snap can pull two originally well-separated
+    peaks toward each other, producing a same-foot pair closer than the
+    minimum physiologically-plausible stride time. find_peaks' own
+    `distance` guarantee only holds on the smoothed signal *before*
+    snapping, so it doesn't catch this. Uncaught, it shows up as an
+    implausible cadence spike (one very short "stride") in an otherwise
+    normal-looking sequence.
+    """
+    if len(peaks) <= 1:
+        return list(peaks)
+    ordered = sorted(peaks)
+    kept = [ordered[0]]
+    for p in ordered[1:]:
+        while kept and p - kept[-1] < min_distance:
+            if values[p] > values[kept[-1]]:
+                kept.pop()
+            else:
+                p = None
+                break
+        if p is not None:
+            kept.append(p)
+    return kept
+
+
 def _detect_foot_strikes(pose_frames, fps=30.0):
     """Return (strikes_left, strikes_right) as lists of frame indices.
 
@@ -244,7 +279,7 @@ def _detect_foot_strikes(pose_frames, fps=30.0):
                 hi = min(len(raw_arr), p + _STRIKE_RADIUS + 1)
                 offset = int(np.argmax(raw_arr[lo:hi]))
                 refined.append(lo + offset)
-            return refined
+            return _suppress_close_peaks(refined, raw_arr, min_distance)
 
         except ImportError:
             # Pure-Python fallback: manual local-maximum search on raw signal.
@@ -260,7 +295,7 @@ def _detect_foot_strikes(pose_frames, fps=30.0):
                 if ys_raw[i] - min(neighbourhood) < _MIN_PROMINENCE:
                     continue
                 out.append(i)
-            return out
+            return _suppress_close_peaks(out, ys_raw, min_distance)
 
     left = find_maxima(left_ys_raw, left_ys_smooth)
     right = find_maxima(right_ys_raw, right_ys_smooth)
@@ -311,8 +346,10 @@ def _metrics_for_stride(stride_frames, start_frame, end_frame, scale, height_cm,
     vertical_osc_norm = (max(hip_ys) - min(hip_ys)) if hip_ys else 0
     vertical_osc_cm = vertical_osc_norm * scale
 
-    # Knee angle — averaged over a small window around the strike frame so one
-    # blurry frame doesn't determine the whole reading.
+    # Knee flexion at strike (degrees bent from straight) — averaged over a
+    # small window around the strike frame so one blurry frame doesn't
+    # determine the whole reading. See _knee_angle_window for why this is
+    # 180° minus the raw joint angle, not the raw angle itself.
     knee_angle = _knee_angle_window(stride_frames, start_frame, left=True)
 
     # Foot strike position — small window average around the strike for the same reason.
@@ -350,10 +387,17 @@ def _angle_between_vectors(v1, v2):
 
 
 def _knee_angle_window(stride_frames, strike_frame_idx, left=True, window=2):
-    """Average knee angle over ±window frames around the strike.
+    """Average knee *flexion* over ±window frames around the strike, in
+    degrees bent from a fully straight leg (0° = straight, larger = more
+    bend). Averaging across a small neighbourhood means one blurry or
+    mis-detected frame near the foot strike doesn't dominate the reading.
 
-    Averaging across a small neighbourhood means one blurry or mis-detected
-    frame near the foot strike doesn't dominate the reading.
+    The hip-knee-ankle vector angle is the knee's raw interior joint angle
+    (≈180° straight, shrinking as the knee bends) — the inverse of what
+    every consumer of this value expects: KNEE_FLEXION_MIN_DEG and the
+    dashboard/frontend all treat a *small* number as "too straight" and a
+    *larger* one as good knee drive. Flip it here (180° - interior angle)
+    so the returned value actually means what its threshold assumes.
     """
     hip_idx, knee_idx, ankle_idx = (LEFT_HIP, LEFT_KNEE, LEFT_ANKLE) if left else (RIGHT_HIP, RIGHT_KNEE, RIGHT_ANKLE)
     angles = []
@@ -368,9 +412,9 @@ def _knee_angle_window(stride_frames, strike_frame_idx, left=True, window=2):
             continue
         v1 = (lm[hip_idx]["x"] - lm[knee_idx]["x"], lm[hip_idx]["y"] - lm[knee_idx]["y"])
         v2 = (lm[ankle_idx]["x"] - lm[knee_idx]["x"], lm[ankle_idx]["y"] - lm[knee_idx]["y"])
-        angle = _angle_between_vectors(v1, v2)
-        if angle is not None:
-            angles.append(angle)
+        interior_angle = _angle_between_vectors(v1, v2)
+        if interior_angle is not None:
+            angles.append(180.0 - interior_angle)
     return sum(angles) / len(angles) if angles else None
 
 

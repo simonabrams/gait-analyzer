@@ -31,27 +31,38 @@ function getProcessingStage(pct: number): string {
 }
 
 const ALLOWED = { "video/mp4": [".mp4"], "video/quicktime": [".mov"] };
-const MAX_SIZE = 500 * 1024 * 1024;
+// Sized for the 10-15s clip we now recommend (see HomeClient/about-page copy),
+// not the old 30-60s guidance — generous headroom over what that actually
+// produces, not a hard technical ceiling.
+const MAX_SIZE = 100 * 1024 * 1024;
 
 export default function VideoUploader({
   onComplete,
 }: {
   onComplete: (runId: string) => void;
 }) {
+  // 0 means "not entered yet" (see heightError below) — we never default to
+  // a placeholder height like 175: a wrong assumed height throws off every
+  // real-world distance the analysis derives from it (stride length, bounce).
+  // A previously-entered value is still remembered across visits — that's a
+  // real confirmed height, not a guess.
   const [heightCm, setHeightCm] = useState(() => {
-    if (typeof window === "undefined") return 175;
+    if (typeof window === "undefined") return 0;
     const saved = localStorage.getItem("gait_height_cm");
     const parsed = saved ? Number(saved) : NaN;
-    return isFinite(parsed) && parsed >= 100 && parsed <= 250 ? parsed : 175;
+    return isFinite(parsed) && parsed >= 100 && parsed <= 250 ? parsed : 0;
   });
   const [heightUnit, setHeightUnit] = useState<HeightUnit>(() => {
     if (typeof window === "undefined") return "cm";
     return localStorage.getItem("gait_height_unit") === "ftin" ? "ftin" : "cm";
   });
   const [feetInches, setFeetInches] = useState(() => cmToFeetInches(heightCm));
-  const heightError = isHeightInRange(heightCm)
-    ? null
-    : `Height must be between 100–250 cm (about 3'3″–8'2″).`;
+  const heightError =
+    heightCm === 0
+      ? "Enter your height — we use it to calibrate stride length and bounce to real-world units."
+      : isHeightInRange(heightCm)
+        ? null
+        : `Height must be between 100–250 cm (about 3'3″–8'2″).`;
   const [file, setFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [processingProgress, setProcessingProgress] = useState<number | null>(null);
@@ -104,6 +115,7 @@ export default function VideoUploader({
     accept: ALLOWED,
     maxSize: MAX_SIZE,
     maxFiles: 1,
+    multiple: false,
     disabled: isActive,
   });
 
@@ -250,7 +262,7 @@ export default function VideoUploader({
             <p className="text-gray-200 font-medium text-sm">
               {isDragActive ? "Drop the video here" : "Drag and drop a video"}
             </p>
-            <p className="text-gray-400 text-xs mt-1">MP4 or MOV · up to 500 MB</p>
+            <p className="text-gray-400 text-xs mt-1">MP4 or MOV · up to 100 MB</p>
           </>
         )}
       </div>
@@ -279,13 +291,14 @@ export default function VideoUploader({
             type="number"
             min={100}
             max={250}
-            value={heightCm}
+            placeholder="e.g. 175"
+            value={heightCm === 0 ? "" : heightCm}
             onChange={(e) => {
               const val = Number(e.target.value);
               setHeightCm(val);
               localStorage.setItem("gait_height_cm", String(val));
             }}
-            className={`border rounded-lg px-3 py-2 w-24 bg-white/10 text-white ${
+            className={`border rounded-lg px-3 py-2 w-24 bg-white/10 text-white placeholder:text-gray-500 ${
               heightError ? "border-red-400/60" : "border-white/20"
             }`}
           />

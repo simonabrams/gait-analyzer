@@ -251,3 +251,53 @@ def test_right_ankle_fallback():
     result = compute_metrics(frames, 175, 30.0)
     assert result["summary"].get("cadence_avg") is not None
     assert result["summary"]["num_strides"] >= 2
+
+
+# ---- Spurious double-detection (cadence spikes) ----
+def test_close_spurious_strike_is_suppressed_not_counted_as_a_stride():
+    """A spurious extra 'strike' close to a real one (landmark jitter, motion
+    blur) must not produce an implausible-cadence stride. Regression test for
+    a bug where an extra detection 9 frames (0.3s @ 30fps) after a real one
+    was accepted as its own stride, implying ~400 spm — see metrics.py's
+    _suppress_close_peaks and the tightened _STRIDE_MIN_SEC."""
+    frames = _frames_with_strikes_at([10, 40, 49, 80], 100)
+    result = compute_metrics(frames, 175, 30.0)
+    cadences = [s["cadence"] for s in result["strides"]]
+    assert all(c <= 250 for c in cadences), cadences
+
+
+def test_no_implausibly_fast_stride_from_any_detected_pair():
+    """Every detected stride's implied cadence must stay within a
+    physiologically plausible ceiling — nothing above elite sprint cadence."""
+    strike_indices = [10, 40, 70, 100, 130]
+    frames = _frames_with_strikes_at(strike_indices, 150)
+    result = compute_metrics(frames, 175, 30.0)
+    for s in result["strides"]:
+        assert s["cadence"] <= 250, s
+
+
+# ---- Knee flexion semantics ----
+def test_knee_flexion_is_deviation_from_straight_not_raw_joint_angle():
+    """knee_angle_strike_deg must be degrees bent from a straight leg (small
+    = too straight, large = well bent) — the semantic every threshold and
+    the dashboard/frontend assume. The test fixture's hip/knee/ankle are
+    collinear (same x) at every frame, i.e. a straight leg (~180° raw joint
+    angle) — this must read as LOW flexion (~0°), not ~180."""
+    frames = _frames_with_strikes_at([10, 40], 60)
+    result = compute_metrics(frames, 175, 30.0)
+    knee = result["summary"].get("knee_angle_strike_avg_deg")
+    assert knee is not None
+    assert knee < 15, f"expected low flexion for a straight (collinear) leg, got {knee}"
+
+
+def test_knee_flexion_low_triggers_too_straight_heuristic_flag():
+    """A straight-leg-at-strike reading must actually trip the knee-flexion
+    flag end to end (compute_metrics -> evaluate_heuristics), not just look
+    right in isolation — this is the exact chain the dashboard/chart relies on."""
+    from backend.heuristics import evaluate_heuristics
+
+    frames = _frames_with_strikes_at([10, 40], 60)
+    result = compute_metrics(frames, 175, 30.0)
+    flags = evaluate_heuristics(result)
+    metrics_flagged = {f["metric"] for f in flags}
+    assert "knee_flexion_at_strike" in metrics_flagged, flags
