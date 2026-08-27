@@ -19,8 +19,8 @@ before this does.
 >
 > To analyze your form, Runlens uploads your video to our servers, where a
 > computer-vision model measures your movement (cadence, joint angles, stride).
-> Your video and results stay in your account until you delete them — and
-> deleting a run removes them from our storage.
+> Your video and results stay with us until you delete them — and deleting
+> a run removes them from our storage.
 >
 > We never sell your data or use your video to train AI.
 >
