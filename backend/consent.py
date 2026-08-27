@@ -14,7 +14,7 @@ from backend.models import ConsentRecord
 
 # Bump only when the published policy text materially changes — every bump
 # forces all users through the consent prompt again.
-PRIVACY_POLICY_VERSION = os.environ.get("PRIVACY_POLICY_VERSION", "2026-07-draft").strip()
+PRIVACY_POLICY_VERSION = os.environ.get("PRIVACY_POLICY_VERSION", "2026-08-draft").strip()
 
 
 def get_consent(db: Session, user_id: str, policy_version: str | None = None) -> ConsentRecord | None:
@@ -29,12 +29,18 @@ def get_consent(db: Session, user_id: str, policy_version: str | None = None) ->
     )
 
 
-def record_consent(db: Session, user_id: str, policy_version: str) -> datetime:
-    """Record consent for a policy version, idempotently. Returns the consent timestamp."""
+def record_consent(
+    db: Session, user_id: str, policy_version: str, age_confirmed: bool | None = None
+) -> datetime:
+    """Record consent for a policy version, idempotently. Returns the consent timestamp.
+
+    `age_confirmed` is the anonymous-flow "I'm 18 or older" checkbox (None for
+    authenticated consent, where it isn't collected — see backend/main.py).
+    """
     existing = get_consent(db, user_id, policy_version)
     if existing:
         return existing.created_at
-    record = ConsentRecord(user_id=user_id, policy_version=policy_version)
+    record = ConsentRecord(user_id=user_id, policy_version=policy_version, age_confirmed=age_confirmed)
     db.add(record)
     db.commit()
     return record.created_at

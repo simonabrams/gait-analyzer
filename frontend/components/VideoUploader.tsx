@@ -10,7 +10,7 @@ import {
   getRunStatus,
   recordConsent,
 } from "@/lib/api";
-import { getOrCreateAnonId } from "@/lib/anon";
+import { getOrCreateAnonId, rememberAnonRun } from "@/lib/anon";
 import {
   cmToFeetInches,
   feetInchesToCm,
@@ -133,7 +133,7 @@ export default function VideoUploader({
     await startUpload();
   };
 
-  const agreeConsent = async () => {
+  const agreeConsent = async (ageConfirmed: boolean) => {
     setConsentBusy(true);
     setConsentError(null);
     try {
@@ -141,7 +141,7 @@ export default function VideoUploader({
       const anonId = token ? undefined : getOrCreateAnonId();
       const version =
         policyVersion ?? (await getConsentStatus(token ?? undefined, anonId)).policy_version;
-      await recordConsent(version, token ?? undefined, anonId);
+      await recordConsent(version, token ?? undefined, anonId, ageConfirmed);
       setConsentOk(true);
       setShowConsent(false);
       await startUpload();
@@ -182,6 +182,9 @@ export default function VideoUploader({
       const { run_id } = await createRunWithProgress(form, token ?? undefined, anonId, (pct) => {
         setUploadProgress(pct);
       });
+      // Remember this run as "ours" so the anonymous visitor gets a self-serve
+      // delete control on its results page (see lib/anon.ts, DeleteScanButton).
+      if (anonId) rememberAnonRun(run_id);
 
       // Upload done — switch to processing phase
       setUploadProgress(null);
@@ -377,6 +380,7 @@ export default function VideoUploader({
           onClose={() => setShowConsent(false)}
           busy={consentBusy}
           error={consentError}
+          isAnonymous={!isSignedIn}
         />
       )}
     </div>

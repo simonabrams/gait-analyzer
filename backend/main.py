@@ -521,14 +521,19 @@ def list_runs(
 
 
 # ---------------------------------------------------------------------------
-# DELETE /api/runs/{run_id} — requires auth; only owner can delete
+# DELETE /api/runs/{run_id} — owner only. "Owner" is a Clerk user_id for
+# signed-in callers or a validated anon id for anonymous ones (same identity
+# resolution as create_run/consent), so an anonymous visitor can self-serve
+# delete a scan they made without ever creating an account.
 # ---------------------------------------------------------------------------
 @app.delete("/api/runs/{run_id}", status_code=204)
 def delete_run(
     run_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user_id: str = Depends(get_current_user),
+    auth_user_id: str | None = Depends(get_optional_user),
+    x_anon_id: str | None = Header(default=None, alias="X-Anon-Id"),
 ):
+    user_id = anon.resolve_user_id(auth_user_id, x_anon_id)
     run = _get_run(db, run_id)
     if not run:
         raise HTTPException(404, "Run not found")
@@ -592,7 +597,21 @@ def accept_consent(
                 "message": "The privacy policy has been updated. Please reload and review the current version.",
             },
         )
-    consented_at = consent.record_consent(db, user_id, body.policy_version)
+    # Anonymous visitors never went through Clerk sign-up, so nothing has
+    # implied they're 18+ — the checkbox is required server-side, not just
+    # gated in the UI. Signed-in users aren't asked (see ConsentModal).
+    is_anonymous = auth_user_id is None
+    if is_anonymous and not body.age_confirmed:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "age_confirmation_required",
+                "message": "Please confirm you're 18 or older to continue.",
+            },
+        )
+    consented_at = consent.record_consent(
+        db, user_id, body.policy_version, age_confirmed=body.age_confirmed if is_anonymous else None
+    )
     logger.info(
         "Consent recorded",
         extra={"user_id": user_id, "policy_version": body.policy_version},
