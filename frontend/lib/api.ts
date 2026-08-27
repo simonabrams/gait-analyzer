@@ -223,10 +223,11 @@ export async function listRuns(
   return fetchApi<RunListResponse>(`/api/runs${query}`, undefined, token);
 }
 
-/** Delete a run. Requires a valid Clerk Bearer token and ownership. */
-export async function deleteRun(id: string, token: string): Promise<boolean> {
+/** Delete a run. Requires ownership: a valid Clerk Bearer token, or (for a
+ * scan made without an account) the anon id that created it. */
+export async function deleteRun(id: string, token?: string, anonId?: string): Promise<boolean> {
   try {
-    await fetchApi<void>(`/api/runs/${id}`, { method: "DELETE" }, token);
+    await fetchApi<void>(`/api/runs/${id}`, { method: "DELETE" }, token, anonId);
     return true;
   } catch {
     return false;
@@ -240,18 +241,21 @@ export async function getConsentStatus(token?: string, anonId?: string): Promise
 }
 
 /** Record consent to the given policy version. 409 (code "stale_policy_version")
- * means the policy changed since the page loaded — reload and re-present it. */
+ * means the policy changed since the page loaded — reload and re-present it.
+ * `ageConfirmed` is the anonymous-only "I'm 18 or older" checkbox — required
+ * (400 "age_confirmation_required") when consenting without a token. */
 export async function recordConsent(
   policyVersion: string,
   token?: string,
   anonId?: string,
+  ageConfirmed?: boolean,
 ): Promise<ConsentStatus> {
   return fetchApi<ConsentStatus>(
     "/api/consent",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ policy_version: policyVersion }),
+      body: JSON.stringify({ policy_version: policyVersion, age_confirmed: !!ageConfirmed }),
     },
     token,
     anonId,

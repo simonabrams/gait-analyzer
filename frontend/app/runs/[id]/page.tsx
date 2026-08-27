@@ -8,6 +8,7 @@ import ShareButton from "@/components/ShareButton";
 import PdfReportButton from "@/components/PdfReportButton";
 import AccuracyBanner from "@/components/AccuracyBanner";
 import ClaimBanner from "@/components/ClaimBanner";
+import DeleteScanButton from "@/components/DeleteScanButton";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -122,6 +123,7 @@ export default async function RunResultPage({ params, searchParams }: Props) {
           >
             Run history
           </Link>
+          <DeleteScanButton runId={id} />
         </div>
       </div>
 

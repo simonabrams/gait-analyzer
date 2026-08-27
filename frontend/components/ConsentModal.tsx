@@ -6,19 +6,26 @@ import posthog from "posthog-js";
 
 /** Copy is drafted in docs/trust/03-in-app-copy.md §1 — pending legal review.
  * The checkbox sentence is the load-bearing consent language; don't edit it
- * without updating the doc (and counsel sign-off). */
+ * without updating the doc (and counsel sign-off).
+ *
+ * The "I'm 18 or older" checkbox is required of every user, signed in or
+ * not — nothing upstream of this (Clerk sign-up included) establishes age
+ * today. The backend enforces this too (see main.py's accept_consent), this
+ * is UX, not the security boundary. */
 export default function ConsentModal({
   onAgree,
   onClose,
   busy,
   error,
 }: {
-  onAgree: () => void;
+  onAgree: (ageConfirmed: boolean) => void;
   onClose: () => void;
   busy: boolean;
   error: string | null;
 }) {
   const [checked, setChecked] = useState(false);
+  const [ageChecked, setAgeChecked] = useState(false);
+  const canContinue = checked && ageChecked;
 
   useEffect(() => {
     posthog.capture("consent_prompt_shown");
@@ -63,12 +70,23 @@ export default function ConsentModal({
             measurements derived from it.
           </span>
         </label>
+        <label className="flex items-start gap-3 mb-6 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={ageChecked}
+            onChange={(e) => setAgeChecked(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-primary"
+          />
+          <span className="text-gray-300 text-sm leading-relaxed">
+            I&apos;m 18 or older.
+          </span>
+        </label>
         {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
         <div className="flex gap-3">
           <button
             type="button"
-            onClick={onAgree}
-            disabled={!checked || busy}
+            onClick={() => onAgree(ageChecked)}
+            disabled={!canContinue || busy}
             className="flex-1 py-3 bg-primary text-background font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
           >
             {busy ? "Saving…" : "Agree & continue"}

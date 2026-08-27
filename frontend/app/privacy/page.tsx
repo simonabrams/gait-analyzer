@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 // factually true of the running app; anything undecided is omitted rather than
 // guessed at. PRIVACY_POLICY_VERSION (backend) should be bumped whenever this
 // page's content materially changes.
-const LAST_UPDATED = "July 25, 2026";
+const LAST_UPDATED = "August 27, 2026";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -137,6 +137,33 @@ export default function PrivacyPage() {
             </p>
           </Section>
 
+          <Section title="Using Runlens without an account">
+            <p>
+              You can try Runlens once without signing up. When you do, we identify
+              you by a random ID generated in your browser and stored there (not by
+              your name or email) — it&apos;s just enough to give you one free scan
+              and to know which run is yours.
+            </p>
+            <p>
+              Everything else works the same way: we still ask you to confirm
+              you&apos;re 18 or older and agree to this notice before we&apos;ll
+              process your video, and your video and results are stored and
+              protected exactly like a signed-in user&apos;s.
+            </p>
+            <p>
+              The trade-off is that without an account, we have no way to help you
+              get back to a scan you didn&apos;t save the link to — there&apos;s no
+              run history and no &quot;forgot password&quot; recovery for a random
+              browser ID. Bookmark your results page if you want to find it again.
+            </p>
+            <p>
+              You can delete an anonymous scan yourself, anytime, right from its
+              results page — no account needed. And if you sign up afterward, we
+              link any scan(s) you made anonymously to your new account, so they
+              show up in your run history instead of being orphaned.
+            </p>
+          </Section>
+
           <Section title="How your video flows">
             <p>
               You upload a video over an encrypted connection. Our servers analyze
@@ -202,7 +229,8 @@ export default function PrivacyPage() {
             <ul className="list-disc pl-5 space-y-1.5">
               <li>
                 <strong className="text-white">Delete any run</strong> — from your
-                Runs page, anytime.
+                Runs page, anytime. Used Runlens without an account? Delete that
+                scan directly from its results page instead — see above.
               </li>
               <li>
                 <strong className="text-white">Delete everything</strong> — email{" "}
@@ -231,9 +259,10 @@ export default function PrivacyPage() {
 
           <Section title="Age">
             <p>
-              Runlens is for adults: you must be at least 18 to create an account.
-              We don&apos;t knowingly collect data from anyone younger; if we learn
-              we have, we&apos;ll delete it.
+              Runlens is for adults: you must be at least 18 to use Runlens. We ask
+              every user — signed in or not — to confirm this before their first
+              scan is processed. We don&apos;t knowingly collect data from anyone
+              younger; if we learn we have, we&apos;ll delete it.
             </p>
           </Section>
 

@@ -6,13 +6,14 @@
 
 ---
 
-## 1. First-upload consent (BUILT 2026-07-25 — copy pending legal review)
+## 1. First-upload consent (BUILT 2026-07-25, age checkbox added 2026-08-27, extended to all users 2026-08-27 — copy pending legal review)
 
 **Where:** `ConsentModal`, shown on the first Analyze click (and whenever
 `PRIVACY_POLICY_VERSION` is bumped). Consent is logged server-side in
-`consent_records` (user, policy version, timestamp) and enforced by
-`POST /api/runs` (403 `consent_required`). The modal links to `/privacy` and
-`/terms`, which **do not exist yet** — those pages must ship before this does.
+`consent_records` (user, policy version, age confirmation, timestamp) and
+enforced by `POST /api/runs` (403 `consent_required`). The modal links to
+`/privacy` and `/terms`, which **do not exist yet** — those pages must ship
+before this does.
 
 > ### Before your first analysis
 >
@@ -27,11 +28,29 @@
 > [Terms](/terms), and I consent to Runlens processing my video and the
 > body-movement measurements derived from it.
 >
+> ☐ I'm 18 or older.
+>
 > **[Agree & continue]**  ·  [Not now]
+
+**Age checkbox (anon-only BUILT 2026-08-27, extended to signed-in users the
+same day):** shown for every user, signed in or not — nothing upstream of
+this (Clerk sign-up included) establishes age today, so account creation was
+never actually a valid basis for the old "you must be 18 to create an
+account" framing (see gap analysis #10, now closed). Both checkboxes are
+required to continue. `POST /api/consent` rejects consent missing the
+confirmation (400 `age_confirmation_required`) for every caller — this is
+enforced server-side, not just gated in the UI. Persisted as `age_confirmed`
+on the `consent_records` row (null only for rows recorded before this
+requirement existed). Extending it to signed-in users required bumping
+`PRIVACY_POLICY_VERSION` again (to `2026-08-27-draft`) so already-consented
+accounts get re-prompted — see item 10 below (re-consent on policy change).
 
 **[LEGAL REVIEW — the checkbox sentence is the load-bearing consent language,
 especially re: biometric-derived data. Counsel decides if it must be a
-separate, explicit consent distinct from ToS acceptance.]**
+separate, explicit consent distinct from ToS acceptance. The age checkbox
+wording ("I'm 18 or older") is a self-attestation, not verified age
+assurance — counsel should confirm this is sufficient for the jurisdictions
+Runlens serves.]**
 
 ## 2. Filming-others reminder (NOT BUILT)
 
@@ -97,6 +116,17 @@ conditions (low ankle visibility, trimming, low fps from `preprocessing_meta`).
 > Delete this run? The video, annotated video, dashboard, and metrics will be
 > removed from our storage, and any share link will stop working. This can't
 > be undone.
+
+**Anonymous scans (BUILT 2026-08-27):** `DeleteScanButton` on the run detail
+page gives an anonymous visitor the same deletion control, without an
+account or a Runs page to find it from. It renders only when the viewing
+browser's `localStorage` remembers creating that specific run (see
+`lib/anon.ts`'s `rememberAnonRun`/`hasAnonRun`) — never for other visitors of
+a shared link. `DELETE /api/runs/{id}` now accepts `X-Anon-Id` the same way
+`create_run`/consent do, and checks it against the run's owner id — same
+404-not-403 ownership check as the authenticated path. Currently a plain
+confirm/cancel toggle, not the fuller copy above — **[FOLLOW-UP: bring this
+in line with the confirmation copy once counsel reviews it]**.
 
 **Delete account (backend cascade BUILT 2026-07-25 via Clerk `user.deleted`
 webhook; manual email path documented on /privacy. This confirmation copy is

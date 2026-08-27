@@ -9,7 +9,10 @@ launch-blocker severity.
 - **Per-run deletion that actually purges storage** — `DELETE /api/runs/{id}`
   removes the raw video, annotated video, and dashboard image from R2 plus the
   DB row (`backend/main.py:492`). This is the single most trust-defining
-  control per the outline, and it substantially works (caveat: gap #7).
+  control per the outline, and it substantially works (caveat: gap #7). As of
+  2026-08-27 this also works for anonymous scans (`X-Anon-Id`-based ownership
+  check, same as `create_run`), surfaced via a self-serve button on the run
+  detail page — see `03-in-app-copy.md` #7.
 - **Medical disclaimer, everywhere** — footer on every page
   (`components/Footer.tsx`) + a strong "What Runlens is not" section on
   `/about`.
@@ -35,6 +38,12 @@ to state only what is true of the app today (no entity name, no governing-law
 clause — omitted rather than guessed). Remaining: counsel review (the full
 scaffolding with markers is `02-privacy-policy.md`), legal entity naming, and
 the [DECIDE] on age minimum (interim pages say 18).
+
+`/privacy` gained a "Using Runlens without an account" section 2026-08-27,
+covering the anon identity model (random browser ID, not name/email), the
+18+ confirmation, the lack of account-recovery for a lost link, and anon
+self-serve deletion (gap #10, "what already exists" above). Previously the
+page said nothing about anonymous use at all.
 
 ### 2. ~~No consent flow, no consent logging~~ — BUILT 2026-07-25
 `ConsentModal` gates the first upload; consent is logged in `consent_records`
@@ -93,8 +102,26 @@ No endpoint or UI. Fine to sequence post-launch per the outline, but the
 rights section of the policy (§12) references it — keep the [CONFIRM] marker
 until built.
 
-### 10. No age gate / minors stance
-Nothing in sign-up or copy addresses minimum age. **[DECIDE + LEGAL REVIEW]**
+### 10. No age gate / minors stance — CLOSED (self-attestation) 2026-08-27
+`ConsentModal` shows a required "I'm 18 or older" checkbox for every user —
+signed in or not — enforced server-side (`POST /api/consent` 400
+`age_confirmation_required` if missing) and persisted on the consent record
+(`age_confirmed`). `/privacy`'s Age section states this applies to everyone,
+not just account creation. `PRIVACY_POLICY_VERSION` was bumped to
+`2026-08-27-draft` so already-consented accounts get re-prompted rather than
+grandfathering in unconfirmed rows.
+
+Originally shipped anonymous-only (same day), on the reasoning that account
+creation implicitly established age — that assumption was never actually
+enforced anywhere in the Clerk sign-up flow, so it was closed the same day
+rather than left as a stated-but-untrue policy line.
+
+Remaining: this is self-attestation, not verified age assurance — a
+**[LEGAL REVIEW]** question. A stronger gate (blocking account creation
+itself via Clerk's legal-consent feature, or a custom sign-up form) is
+possible but requires Clerk Dashboard configuration outside this repo, or a
+larger rebuild of the sign-up flow — **[DECIDE]** whether self-attestation
+at first use is sufficient or a harder gate at sign-up is worth it.
 
 ### 11. Smaller items
 - AI-training stance ("we don't train on your video") is true but stated
