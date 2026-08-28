@@ -354,3 +354,61 @@ def test_normal_variation_is_not_treated_as_outliers():
     summary = _compute_summary(strides)
     assert summary["num_strides"] == len(cadences)
     assert summary["num_strides_detected"] == len(cadences)
+
+
+# ---- fps must be the *effective* (post-subsampling) rate, not the source
+# video's native rate — regression test for the GAIT_TARGET_FPS bug ----
+def _subsampled_running_frames(effective_fps, stride_interval_sec, duration_sec):
+    """Pose frames as they'd look after job_runner.py's frame_skip decimation
+    (GAIT_TARGET_FPS): evenly spaced at effective_fps, with a real timestamp
+    per frame and an ankle-y strike pattern repeating every stride_interval_sec."""
+    dt = 1.0 / effective_fps
+    n = int(duration_sec / dt)
+    period_samples = stride_interval_sec / dt
+    frames = []
+    for i in range(n):
+        is_strike = abs(i - round(i / period_samples) * period_samples) < 1
+        left_y = 0.85 if is_strike else 0.65
+        frames.append({
+            "frame_idx": i,
+            "timestamp_ms": i * dt * 1000,
+            "landmarks": {
+                0: _landmark(0.5, 0.2),
+                LEFT_SHOULDER: _landmark(0.4, 0.35), RIGHT_SHOULDER: _landmark(0.6, 0.35),
+                LEFT_HIP: _landmark(0.45, 0.5), RIGHT_HIP: _landmark(0.55, 0.5),
+                LEFT_KNEE: _landmark(0.45, 0.65), RIGHT_KNEE: _landmark(0.55, 0.65),
+                LEFT_ANKLE: _landmark(0.45, left_y), RIGHT_ANKLE: _landmark(0.55, 0.65),
+            },
+        })
+    return frames
+
+
+def test_effective_fps_produces_correct_stride_count_and_cadence():
+    """The 'correct' side of the bug: given the actual sampling rate of the
+    frames (what job_runner.py now passes after computing effective_fps =
+    fps / frame_skip), a realistic 0.7s-interval (~171 spm) 30s clip must
+    detect roughly the expected ~40+ strides at the right cadence."""
+    frames = _subsampled_running_frames(effective_fps=10, stride_interval_sec=0.7, duration_sec=30)
+    result = compute_metrics(frames, 175, fps=10)
+    assert result["summary"]["num_strides"] >= 35
+    assert abs(result["summary"]["cadence_avg"] - 171) <= 5
+
+
+def test_native_fps_on_subsampled_frames_undercounts_and_halves_cadence():
+    """Regression test for the actual bug: job_runner.py used to pass the
+    source video's native fps (e.g. 30, from GAIT_TARGET_FPS's frame_skip
+    decimation) instead of the effective sampled rate (e.g. 10) into
+    compute_metrics. Every time-based constant in _detect_foot_strikes is in
+    units of "array steps per second", so this made them ~3x too wide,
+    merging away most real strides and roughly halving cadence -- this is
+    what turned "not enough strides" (the confidence gate, correctly firing)
+    into an overcorrection: real 30s clips reporting single-digit stride
+    counts. Same frames as the test above, wrong fps -- must visibly regress,
+    proving the fix in job_runner.py (passing effective_fps) matters."""
+    frames = _subsampled_running_frames(effective_fps=10, stride_interval_sec=0.7, duration_sec=30)
+    result = compute_metrics(frames, 175, fps=30)  # the bug: native, not effective
+    assert result["summary"]["num_strides"] < 20, (
+        "expected the native-fps bug to undercount strides significantly; "
+        f"got {result['summary']['num_strides']}"
+    )
+    assert result["summary"]["cadence_avg"] < 171 * 0.7, "expected the halving artifact"
