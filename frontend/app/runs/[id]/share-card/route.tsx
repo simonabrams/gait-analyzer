@@ -104,9 +104,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const summary = run?.results?.summary;
   const flags = run?.results?.flags ?? [];
+  const hasData = summary != null && Object.keys(summary).length > 0;
   // Share cards are a highlight reel, not a diagnostic report — only celebrate
-  // clean runs here. Flagged issues stay on the in-app report page.
-  const showCleanStatus = flags.length === 0 && summary != null;
+  // clean runs here. Flagged issues stay on the in-app report page. A run
+  // with no usable summary (confidence-gate hard fail, or an older
+  // zero-stride run) has zero flags too, but that's "nothing was measured",
+  // not "no issues" — hasData rules that out explicitly.
+  const showCleanStatus = hasData && flags.length === 0;
 
   const heroRaw = summary?.[HERO.key];
   const heroVal = heroRaw != null ? Number(heroRaw) : null;

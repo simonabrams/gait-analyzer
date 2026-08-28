@@ -39,10 +39,27 @@ def _style_ax(ax, title, xlabel, ylabel):
 
 def create_dashboard(results):
     strides = results.get("strides", [])
+    gate = (results.get("meta") or {}).get("confidence_gate") or {}
+    low_confidence = bool(gate.get("low_confidence"))
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 9))
     fig.patch.set_facecolor(BG_DARK)
-    fig.subplots_adjust(hspace=0.42, wspace=0.28, left=0.07, right=0.97, top=0.93, bottom=0.08)
+    # Leave a touch more headroom when the confidence banner is shown so it
+    # doesn't crowd the top row of subplot titles.
+    fig.subplots_adjust(
+        hspace=0.42, wspace=0.28, left=0.07, right=0.97,
+        top=0.90 if low_confidence else 0.93, bottom=0.08,
+    )
+
+    if low_confidence:
+        usable = gate.get("usable_stride_count")
+        note = (
+            f"Based on {usable} detected strides — lower confidence than usual"
+            if usable is not None
+            else "Lower confidence than usual — fewer strides detected than ideal"
+        )
+        fig.text(0.5, 0.965, note, ha="center", va="top", color=COLOR_WARN,
+                  fontsize=11, fontweight="semibold")
 
     xs = list(range(1, len(strides) + 1))
 

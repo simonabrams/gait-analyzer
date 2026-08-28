@@ -45,6 +45,9 @@ def build_run_report_pdf(run, output_path: str) -> None:
     title_style = ParagraphStyle("RunlensTitle", parent=styles["Title"], textColor=_DARK)
     heading_style = ParagraphStyle("RunlensHeading", parent=styles["Heading2"], textColor=_DARK)
     body_style = styles["BodyText"]
+    warn_style = ParagraphStyle(
+        "RunlensLowConfidence", parent=body_style, textColor=colors.HexColor("#B45309")
+    )
 
     doc = SimpleDocTemplate(
         output_path, pagesize=letter, topMargin=0.6 * inch, bottomMargin=0.6 * inch
@@ -54,6 +57,17 @@ def build_run_report_pdf(run, output_path: str) -> None:
         Paragraph(f"Recorded: {run.recorded_at or run.created_at}", body_style),
         Spacer(1, 0.2 * inch),
     ]
+
+    gate = (results.get("meta") or {}).get("confidence_gate") or {}
+    if gate.get("low_confidence"):
+        usable = gate.get("usable_stride_count")
+        note = (
+            f"Based on {usable} detected strides — lower confidence than usual."
+            if usable is not None
+            else "Lower confidence than usual — fewer strides detected than ideal."
+        )
+        story.append(Paragraph(f"<b>{note}</b>", warn_style))
+        story.append(Spacer(1, 0.15 * inch))
 
     metric_rows = [["Metric", "Value", "Target"]]
     for label, key, unit, target in _METRIC_ROWS:

@@ -51,6 +51,27 @@ function SectionEyebrow({ label }: { label: string }) {
   );
 }
 
+interface ConfidenceGate {
+  hardFail: boolean;
+  lowConfidence: boolean;
+  usableStrideCount: number | null;
+  userMessage: string | null;
+}
+
+/** Read backend/confidence_gate.py's info out of results.meta.confidence_gate
+ * (an untyped Record from the API) — see job_runner.py for what sets this. */
+function getConfidenceGate(meta: Record<string, unknown> | undefined): ConfidenceGate | null {
+  const gate = meta?.confidence_gate;
+  if (!gate || typeof gate !== "object") return null;
+  const g = gate as Record<string, unknown>;
+  return {
+    hardFail: g.hard_fail === true,
+    lowConfidence: g.low_confidence === true,
+    usableStrideCount: typeof g.usable_stride_count === "number" ? g.usable_stride_count : null,
+    userMessage: typeof g.user_message === "string" ? g.user_message : null,
+  };
+}
+
 function formatDate(dateStr: string | null): string | null {
   if (!dateStr) return null;
   const d = new Date(dateStr);
@@ -95,9 +116,13 @@ export default async function RunResultPage({ params, searchParams }: Props) {
   const summary = run.results?.summary;
   const flags = run.results?.flags;
   const analyzedDate = formatDate(run.created_at);
+  const gate = getConfidenceGate(run.results?.meta);
 
   // A completed run with an empty summary means pose/stride detection produced
-  // no usable data (wrong angle, walking, too short, etc.)
+  // no usable data (wrong angle, walking, too short, etc.) — or the confidence
+  // gate hard-failed it (too few usable strides, or an implausible aggregate
+  // value like a halved cadence). Either way, same screen: see gate.userMessage
+  // below for why, when we know a specific reason.
   const hasData = summary != null && Object.keys(summary).length > 0;
 
   return (
@@ -148,6 +173,13 @@ export default async function RunResultPage({ params, searchParams }: Props) {
 
       {hasData ? (
         <>
+          {gate?.lowConfidence && (
+            <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-5 py-3 text-sm text-amber-300">
+              {gate.usableStrideCount != null
+                ? `Based on ${gate.usableStrideCount} detected strides — lower confidence than usual.`
+                : "Lower confidence than usual — fewer strides detected than ideal."}
+            </div>
+          )}
           <AccuracyBanner />
 
           {/* Key metrics */}
@@ -200,6 +232,11 @@ export default async function RunResultPage({ params, searchParams }: Props) {
                 pattern to generate stats — but don&apos;t worry, it&apos;s usually just a
                 filming angle thing.
               </p>
+              {gate?.userMessage && (
+                <p className="text-amber-300 text-sm mt-3 leading-relaxed">
+                  {gate.userMessage}
+                </p>
+              )}
             </div>
           </div>
 
