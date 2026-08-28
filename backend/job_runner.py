@@ -111,6 +111,20 @@ def run_analysis(
             raise RuntimeError(f"Could not open video: {video_path}")
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         frame_skip = max(1, round(fps / target_fps)) if target_fps and target_fps > 0 else 1
+        # The actual sampling rate of pose_frames once frame_skip discards
+        # frames (GAIT_TARGET_FPS): every downstream time-based constant in
+        # metrics.py (minimum stride spacing, smoothing window) is calibrated
+        # in units of "array steps per second" and must use the rate frames
+        # actually arrive at, not the source video's native rate. Passing the
+        # native rate here when frame_skip > 1 makes every one of those
+        # constants too wide by a factor of frame_skip -- e.g. at 30fps
+        # native / 10fps effective (frame_skip=3), the minimum-stride-spacing
+        # check silently starts requiring 3x the real seconds between
+        # detected strikes, merging away real strides and roughly halving
+        # the computed cadence (reproduced: a realistic 171 spm / 41-stride
+        # clip reads as 86 spm / 8 strides when fed the native rate instead
+        # of this one).
+        effective_fps = fps / frame_skip
         pose_frames = []
         frames_used = 0
         out_h = out_w = None
@@ -163,7 +177,7 @@ def run_analysis(
 
         report(40, "Computing metrics...")
         results = compute_metrics(
-            pose_frames, height_cm, fps, video_file=video_path.name
+            pose_frames, height_cm, effective_fps, video_file=video_path.name
         )
 
         # Single choke point: decide whether this run's data is trustworthy
@@ -184,7 +198,10 @@ def run_analysis(
         )
         os.close(fd_v)
         temp_paths.append(annotated_video_path)
-        out_fps = _sanitize_fps_for_writer(fps)
+        # Use the effective (post-frame_skip) rate here too, or the output
+        # plays back frame_skip times faster than the source when
+        # GAIT_TARGET_FPS is set — frame_cache only has the kept frames.
+        out_fps = _sanitize_fps_for_writer(effective_fps)
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         writer = cv2.VideoWriter(
             annotated_video_path, fourcc, out_fps, (out_w, out_h)
