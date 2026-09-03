@@ -1,7 +1,7 @@
 import { MetadataRoute } from "next";
 
 const BASE = "https://runlens.io";
-const SAMPLE_RUN_ID = "aba77d1f-2c19-4d10-808c-f4f7fd7b90e3";
+const SAMPLE_RUN_ID = "377504bc-4de2-4322-889d-8c14819991c9";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
