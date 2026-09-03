@@ -8,7 +8,7 @@ if (!API_BASE) {
 }
 
 /** Replace with a real sample run ID when you have an analysis to showcase. */
-export const SAMPLE_RUN_ID = "aba77d1f-2c19-4d10-808c-f4f7fd7b90e3";
+export const SAMPLE_RUN_ID = "377504bc-4de2-4322-889d-8c14819991c9";
 
 export interface RunCreated {
   run_id: string;
