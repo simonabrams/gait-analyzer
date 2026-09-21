@@ -27,13 +27,14 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from sqlalchemy import func, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from backend import anon, billing, claim, consent, storage
+from backend import anon, billing, claim, consent, results_schema, storage
 from backend.analytics import capture as posthog_capture
 from backend.analytics import posthog_client
 from backend.database import get_db
-from backend.models import Run, RunStatus, Subscription, SubscriptionTier
+from backend.models import Run, RunStatus, RunVideo, Subscription, SubscriptionTier, VideoViewType
 from backend.schemas import (
     BillingStatusResponse,
     CheckoutRequest,
@@ -43,6 +44,7 @@ from backend.schemas import (
     ConsentAcceptRequest,
     ConsentStatusResponse,
     PortalResponse,
+    RearVideoCreatedResponse,
     RunCreatedResponse,
     RunDetail,
     RunListItem,
@@ -53,6 +55,7 @@ from backend.storage import (
     delete_object,
     generate_presigned_url,
     raw_video_key,
+    rear_video_key,
     upload_file,
 )
 
@@ -200,6 +203,24 @@ def _cached_presigned_url(r2_key: str) -> str:
     return _presigned_cache[r2_key]
 
 
+def _get_rear_video(db: Session, run_id: uuid.UUID) -> RunVideo | None:
+    return (
+        db.query(RunVideo)
+        .filter(RunVideo.run_id == run_id, RunVideo.view_type == VideoViewType.rear.value)
+        .first()
+    )
+
+
+def _run_storage_keys(db: Session, run: Run) -> list[str]:
+    """Every stored object belonging to a run: the side pipeline's three keys
+    on `runs`, plus every video registered in run_videos (the rear video).
+    Deletion paths must use this, not a hand-written key list, or an object
+    survives in storage while we tell the user it's gone."""
+    keys = [run.raw_video_r2_key, run.annotated_video_r2_key, run.dashboard_image_r2_key]
+    keys += [v.r2_key for v in db.query(RunVideo).filter(RunVideo.run_id == run.id).all()]
+    return list(dict.fromkeys(k for k in keys if k))
+
+
 # ---------------------------------------------------------------------------
 # Health — verifies DB and Redis are reachable before returning 200
 # ---------------------------------------------------------------------------
@@ -251,6 +272,54 @@ def serve_local_artifact(run_id: str, filename: str):
 # ---------------------------------------------------------------------------
 # POST /api/runs — create a run (requires auth; run is owned by the caller)
 # ---------------------------------------------------------------------------
+async def _store_upload(file: UploadFile, r2_key: str) -> str:
+    """Validate an uploaded video (extension, container magic bytes, size cap)
+    and stream it to storage at `r2_key`. Returns the lower-cased extension.
+    Shared by the side upload (create_run) and the rear upload so both get
+    exactly the same checks."""
+    suffix = (file.filename or "").split(".")[-1].lower()
+    if suffix not in ALLOWED_EXTENSIONS:
+        raise HTTPException(400, "Only MP4 and MOV files are allowed")
+
+    # Validate magic bytes: all MP4/MOV containers have 'ftyp' at bytes 4–7
+    header = await file.read(12)
+    if header[4:8] != b"ftyp":
+        raise HTTPException(400, "Invalid file: not a valid MP4 or MOV container")
+    await file.seek(0)
+
+    # Stream the upload to a temp file in 64 KB chunks instead of reading into RAM.
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+            tmp_path = tmp.name
+            total_bytes = 0
+            while True:
+                chunk = await file.read(_CHUNK)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_FILE_SIZE:
+                    raise HTTPException(400, "File too large (max 500 MB)")
+                tmp.write(chunk)
+        upload_file(tmp_path, r2_key)
+    except HTTPException:
+        raise
+    except RuntimeError as e:
+        if "R2" in str(e) or "LOCAL_STORAGE" in str(e):
+            raise HTTPException(
+                503,
+                "Storage not configured. Set LOCAL_STORAGE_PATH (e.g. .local_storage) or R2 credentials.",
+            ) from e
+        raise
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+    return suffix
+
+
 @app.post("/api/runs", response_model=RunCreatedResponse)
 @limiter.limit("10/hour")
 async def create_run(
@@ -302,48 +371,9 @@ async def create_run(
             sub.referred_by_code = referral_code
             db.commit()
 
-    suffix = (file.filename or "").split(".")[-1].lower()
-    if suffix not in ALLOWED_EXTENSIONS:
-        raise HTTPException(400, "Only MP4 and MOV files are allowed")
-
-    # Validate magic bytes: all MP4/MOV containers have 'ftyp' at bytes 4–7
-    header = await file.read(12)
-    if header[4:8] != b"ftyp":
-        raise HTTPException(400, "Invalid file: not a valid MP4 or MOV container")
-    await file.seek(0)
-
-    # Stream the upload to a temp file in 64 KB chunks instead of reading into RAM.
     run_id = uuid.uuid4()
     raw_key = raw_video_key(str(run_id))
-    tmp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-            tmp_path = tmp.name
-            total_bytes = 0
-            while True:
-                chunk = await file.read(_CHUNK)
-                if not chunk:
-                    break
-                total_bytes += len(chunk)
-                if total_bytes > MAX_FILE_SIZE:
-                    raise HTTPException(400, "File too large (max 500 MB)")
-                tmp.write(chunk)
-        upload_file(tmp_path, raw_key)
-    except HTTPException:
-        raise
-    except RuntimeError as e:
-        if "R2" in str(e) or "LOCAL_STORAGE" in str(e):
-            raise HTTPException(
-                503,
-                "Storage not configured. Set LOCAL_STORAGE_PATH (e.g. .local_storage) or R2 credentials.",
-            ) from e
-        raise
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
+    suffix = await _store_upload(file, raw_key)
 
     run = Run(
         id=run_id,
@@ -354,6 +384,7 @@ async def create_run(
         raw_video_r2_key=raw_key,
     )
     db.add(run)
+    db.add(RunVideo(run_id=run_id, view_type=VideoViewType.side.value, r2_key=raw_key))
     try:
         db.commit()
     except Exception as e:
@@ -384,6 +415,92 @@ async def create_run(
 
 
 # ---------------------------------------------------------------------------
+# POST /api/runs/{run_id}/rear-video — optional second (rear-view) video.
+# Independent of the side analysis: it can be added before, during or after the
+# side run completes, never blocks or fails it, and does not count as a
+# separate scan (no free-scan accounting here — the run already paid for one).
+# ---------------------------------------------------------------------------
+@app.post("/api/runs/{run_id}/rear-video", response_model=RearVideoCreatedResponse)
+@limiter.limit("10/hour")
+async def add_rear_video(
+    request: Request,
+    run_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    auth_user_id: str | None = Depends(get_optional_user),
+    x_anon_id: str | None = Header(default=None, alias="X-Anon-Id"),
+):
+    user_id = anon.resolve_user_id(auth_user_id, x_anon_id)
+    run = _get_run(db, run_id)
+    # 404 (not 403) for someone else's run, same as delete_run — don't leak existence.
+    if not run or run.user_id != user_id:
+        raise HTTPException(404, "Run not found")
+
+    # Consent may have been re-required (policy version bump) since the run was created.
+    if not consent.get_consent(db, user_id):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "consent_required",
+                "message": "Please review and accept the privacy policy before uploading.",
+            },
+        )
+
+    existing = _get_rear_video(db, run_id)
+    # One rear video per run. A failed one may be retried (the same row is reused).
+    if existing and existing.status != "failed":
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "rear_video_exists", "message": "This run already has a rear-view video."},
+        )
+
+    rear_key = rear_video_key(str(run_id))
+    suffix = await _store_upload(file, rear_key)
+
+    try:
+        if existing:
+            existing.status = "processing"
+            existing.error_message = None
+            existing.results_json = None
+        else:
+            db.add(RunVideo(
+                run_id=run_id,
+                view_type=VideoViewType.rear.value,
+                r2_key=rear_key,
+                status="processing",
+            ))
+        db.commit()
+    except IntegrityError:
+        # A concurrent request inserted the (run, rear) row first.
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "rear_video_exists", "message": "This run already has a rear-view video."},
+        )
+    except Exception as e:
+        db.rollback()
+        logger.exception("DB commit failed for rear video of run %s: %s", run_id, e)
+        raise HTTPException(500, "Database error. Check server logs.") from e
+
+    try:
+        from backend.rear_worker import process_rear_video
+        process_rear_video.delay(str(run_id), rear_key)
+    except Exception as e:
+        logger.exception("Failed to enqueue rear job for run %s: %s", run_id, e)
+        row = _get_rear_video(db, run_id)
+        if row:
+            # Leave it retryable rather than stuck in "processing" forever.
+            row.status = "failed"
+            row.error_message = "Job queue unavailable."
+            db.commit()
+        raise HTTPException(503, "Job queue unavailable. Is Redis running?") from e
+
+    logger.info("Rear video added", extra={"run_id": str(run_id), "user_id": user_id})
+    posthog_capture(user_id, "rear_video_added", {"file_format": suffix, "is_anonymous": auth_user_id is None})
+    return RearVideoCreatedResponse(run_id=run_id, rear_status="processing")
+
+
+# ---------------------------------------------------------------------------
 # GET /api/runs/{run_id}/status — public (anyone with UUID can poll status)
 # ---------------------------------------------------------------------------
 @app.get("/api/runs/{run_id}/status", response_model=RunStatusResponse)
@@ -399,10 +516,13 @@ def get_run_status(
     preprocessing_warning = None
     if (run.preprocessing_meta or {}).get("was_trimmed"):
         preprocessing_warning = "Video trimmed to 3 minutes"
+    rear = _get_rear_video(db, run_id)
     return RunStatusResponse(
         status=run.status.value,
         progress=run.progress_pct or 0,
         preprocessing_warning=preprocessing_warning,
+        # None = no rear video on this run; independent of `status` above.
+        rear_status=rear.status if rear else None,
     )
 
 
@@ -425,7 +545,12 @@ def get_run(
         recorded_at=run.recorded_at,
         height_cm=run.height_cm,
         status=run.status.value,
-        results=run.results_json,
+        # Side results + (if a rear video was added) its rear_view, merged at read
+        # time so the two independent pipelines never write the same JSONB column.
+        results=results_schema.attach_rear_view(
+            run.results_json,
+            results_schema.rear_view_from_video_row(_get_rear_video(db, run.id)),
+        ),
         error_message=run.error_message,
     )
     if run.status == RunStatus.complete and run.results_json:
@@ -556,10 +681,9 @@ def delete_run(
     # tell the user their video is gone while it survives in R2 with no
     # reconciliation path. Failing here leaves the run intact so they can retry.
     try:
-        for key in [run.raw_video_r2_key, run.annotated_video_r2_key, run.dashboard_image_r2_key]:
-            if key:
-                delete_object(key)
-                _presigned_cache.pop(key, None)
+        for key in _run_storage_keys(db, run):
+            delete_object(key)
+            _presigned_cache.pop(key, None)
     except Exception as e:
         logger.error("Storage delete failed for run %s: %s", run_id, e)
         raise HTTPException(502, "Couldn't delete the stored files. Please try again.") from e
@@ -787,10 +911,9 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
     deleted, failed = 0, 0
     for run in runs:
         try:
-            for key in (run.raw_video_r2_key, run.annotated_video_r2_key, run.dashboard_image_r2_key):
-                if key:
-                    delete_object(key)
-                    _presigned_cache.pop(key, None)
+            for key in _run_storage_keys(db, run):
+                delete_object(key)
+                _presigned_cache.pop(key, None)
         except Exception as e:
             logger.error("Storage delete failed during account deletion of %s (run %s): %s", user_id, run.id, e)
             failed += 1

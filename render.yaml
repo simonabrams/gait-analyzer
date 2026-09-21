@@ -79,7 +79,11 @@ services:
     dockerfilePath: backend/Dockerfile
     dockerContext: .
     plan: standard
-    dockerCommand: "celery -A backend.worker worker --loglevel=info --concurrency=1 --max-tasks-per-child=1"
+    # -Q: this worker must consume BOTH queues — "celery" (side-view task) and
+    # "rear_view" (optional rear-view task) — or rear jobs are never picked up.
+    # Same single-concurrency worker, so they run one after the other; to run
+    # them in parallel later, split into a second worker service with -Q rear_view.
+    dockerCommand: "celery -A backend.worker worker --loglevel=info --concurrency=1 --max-tasks-per-child=1 -Q celery,rear_view"
     envVars:
       - key: DATABASE_URL
         fromDatabase:

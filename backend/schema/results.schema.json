@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://runlens.io/schema/results.schema.json",
+  "title": "Runlens results document",
+  "description": "The results JSON returned as `results` by GET /api/runs/{id}. Version 1 (no `schema_version` key) is the side-view-only document written before the rear view existed and remains valid unchanged. Version 2 adds an optional `rear_view`. See backend/results_schema.py.",
+  "type": "object",
+  "required": ["meta", "summary", "flags", "strides"],
+  "properties": {
+    "schema_version": {
+      "description": "Absent means 1. Must be 2 whenever rear_view is present.",
+      "enum": [1, 2]
+    },
+    "meta": {
+      "description": "Side-view run metadata (backend/metrics.py, plus meta.confidence_gate from backend/job_runner.py). Open: fields are added over time.",
+      "type": "object",
+      "properties": {
+        "height_cm": { "type": "number" },
+        "video_file": { "type": "string" },
+        "analyzed_at": { "type": "string", "format": "date-time" },
+        "fps": { "type": "number" },
+        "num_frames": { "type": "integer" },
+        "confidence_gate": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "summary": {
+      "description": "Side-view aggregate metrics. Empty object when the side confidence gate hard-failed or nothing could be measured.",
+      "type": "object",
+      "properties": {
+        "cadence_avg": { "type": "number" },
+        "vertical_osc_avg_cm": { "type": "number" },
+        "knee_angle_strike_avg_deg": { "type": ["number", "null"] },
+        "foot_strike_position_avg_cm": { "type": ["number", "null"] },
+        "trunk_lean_avg_deg": { "type": ["number", "null"] },
+        "num_strides": { "type": "integer" },
+        "num_strides_detected": { "type": "integer" },
+        "cadence_confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": true
+    },
+    "flags": { "type": "array", "items": { "type": "object" } },
+    "strides": { "type": "array", "items": { "type": "object" } },
+    "rear_view": { "$ref": "#/$defs/rear_view" }
+  },
+  "additionalProperties": true,
+  "if": { "required": ["rear_view"] },
+  "then": {
+    "required": ["schema_version"],
+    "properties": { "schema_version": { "const": 2 } }
+  },
+
+  "$defs": {
+    "tier": { "enum": ["low", "moderate", "high"] },
+
+    "confidence": {
+      "type": "object",
+      "required": ["score", "tier"],
+      "properties": {
+        "score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "tier": { "$ref": "#/$defs/tier" }
+      },
+      "additionalProperties": false
+    },
+
+    "rear_view": {
+      "description": "Frontal-plane metrics from an optional, independently recorded rear-view video. NOT synchronised or frame-matched with the side view; all cycle-relative quantities are % of the gait cycle (0% = that leg's initial contact). Never blocks or fails the side-view analysis.",
+      "oneOf": [
+        { "$ref": "#/$defs/rear_view_analysed" },
+        { "$ref": "#/$defs/rear_view_pending" },
+        { "$ref": "#/$defs/rear_view_failed" }
+      ]
+    },
+
+    "rear_view_pending": {
+      "type": "object",
+      "required": ["status"],
+      "properties": { "status": { "const": "processing" } },
+      "additionalProperties": false
+    },
+
+    "rear_view_failed": {
+      "type": "object",
+      "required": ["status", "error"],
+      "properties": {
+        "status": { "const": "failed" },
+        "error": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "rear_view_analysed": {
+      "type": "object",
+      "required": ["status", "meta", "confidence_gate", "legs", "symmetry", "curves"],
+      "properties": {
+        "status": { "enum": ["ok", "low_confidence", "insufficient_data"] },
+        "meta": {
+          "type": "object",
+          "required": ["analyzed_at", "fps", "num_frames", "cycle_normalisation", "synchronized_with_side_view", "left_right_consistency", "left_right_labels_swapped"],
+          "properties": {
+            "video_file": { "type": "string" },
+            "analyzed_at": { "type": "string", "format": "date-time" },
+            "fps": { "type": ["number", "null"] },
+            "num_frames": { "type": "integer" },
+            "cycle_normalisation": { "const": "percent_gait_cycle" },
+            "synchronized_with_side_view": { "const": false },
+            "note": { "type": "string" },
+            "left_right_consistency": { "type": "number", "minimum": 0, "maximum": 1 },
+            "left_right_labels_swapped": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        "confidence_gate": {
+          "type": "object",
+          "required": ["status", "reason", "user_message", "usable_cycles", "left_right_consistency"],
+          "properties": {
+            "status": { "enum": ["ok", "low_confidence", "insufficient_data"] },
+            "reason": { "type": ["string", "null"] },
+            "user_message": { "type": ["string", "null"] },
+            "usable_cycles": {
+              "type": "object",
+              "required": ["left", "right"],
+              "properties": {
+                "left": { "type": "integer", "minimum": 0 },
+                "right": { "type": "integer", "minimum": 0 }
+              },
+              "additionalProperties": false
+            },
+            "left_right_consistency": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "additionalProperties": false
+        },
+        "legs": {
+          "type": "object",
+          "required": ["left", "right"],
+          "properties": {
+            "left": { "$ref": "#/$defs/leg" },
+            "right": { "$ref": "#/$defs/leg" }
+          },
+          "additionalProperties": false
+        },
+        "symmetry": { "$ref": "#/$defs/symmetry" },
+        "curves": {
+          "description": "Ensemble-average waveform per reportable leg, sampled every step_pct % of the gait cycle (21 points, 0..100). null when there is nothing reportable.",
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["step_pct", "unit", "left", "right"],
+              "properties": {
+                "step_pct": { "const": 5 },
+                "unit": { "const": "deg" },
+                "left": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/leg_curves" }] },
+                "right": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/leg_curves" }] }
+              },
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "leg": {
+      "type": "object",
+      "required": ["cycles_detected", "cycles_usable", "reportable", "hip_drop", "pronation", "knee_valgus"],
+      "properties": {
+        "cycles_detected": { "type": "integer", "minimum": 0 },
+        "cycles_usable": { "type": "integer", "minimum": 0 },
+        "reportable": { "type": "boolean" },
+        "stance_pct": { "type": "number", "description": "Approximate stance phase, % of gait cycle." },
+        "midstance_pct": { "type": "number", "description": "Mid-stance, % of gait cycle." },
+        "hip_drop": { "$ref": "#/$defs/hip_drop_metric" },
+        "pronation": { "$ref": "#/$defs/pronation_metric" },
+        "knee_valgus": { "$ref": "#/$defs/knee_valgus_metric" }
+      },
+      "additionalProperties": false
+    },
+
+    "metric_unavailable": {
+      "type": "object",
+      "required": ["available", "reason"],
+      "properties": {
+        "available": { "const": false },
+        "reason": { "enum": ["insufficient_data", "insufficient_cycles", "implausible", "no_frames", "no_pose_detected"] }
+      },
+      "additionalProperties": false
+    },
+
+    "metric_available": {
+      "type": "object",
+      "required": ["available", "value_deg", "pattern", "window_pct", "cycles_used", "error_margin_deg", "confidence", "disclaimer"],
+      "properties": {
+        "available": { "const": true },
+        "value_deg": { "type": "integer", "description": "Rounded to a coarse step (see rear_confidence.DISPLAY_STEP_DEG); a pattern indicator, not a precise angle." },
+        "pattern": { "type": "string" },
+        "window_pct": {
+          "description": "[start, end] of the window this was measured over, % of gait cycle. hip_drop is measured at mid-stance (start == end); the others from initial contact (0) through mid-stance.",
+          "type": "array",
+          "items": { "type": "number", "minimum": 0, "maximum": 100 },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "cycles_used": { "type": "integer", "minimum": 1 },
+        "error_margin_deg": {
+          "description": "Approximate +/- error vs. motion capture; null where no validated figure exists (deliberately not guessed).",
+          "type": ["number", "null"]
+        },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "disclaimer": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "hip_drop_metric": {
+      "description": "Degrees the swing-side hip sits below the stance-side hip at mid-stance (positive = drop).",
+      "oneOf": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/metric_available" },
+            { "properties": { "pattern": { "enum": ["typical", "elevated", "pronounced"] } } }
+          ]
+        },
+        { "$ref": "#/$defs/metric_unavailable" }
+      ]
+    },
+
+    "pronation_metric": {
+      "description": "Rearfoot pronation (+) / supination (-) proxy in degrees from the ankle-to-heel line vs. vertical, initial contact through mid-stance.",
+      "oneOf": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/metric_available" },
+            { "properties": { "pattern": { "enum": ["neutral", "pronation_pattern", "supination_pattern"] } } }
+          ]
+        },
+        { "$ref": "#/$defs/metric_unavailable" }
+      ]
+    },
+
+    "knee_valgus_metric": {
+      "description": "Frontal-plane knee valgus (+) / varus (-) in degrees, initial contact through mid-stance. Single-camera 2D error is roughly +/-19 deg vs. motion capture: a pattern indicator only.",
+      "oneOf": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/metric_available" },
+            { "properties": { "pattern": { "enum": ["neutral", "valgus_pattern", "varus_pattern"] } } }
+          ]
+        },
+        { "$ref": "#/$defs/metric_unavailable" }
+      ]
+    },
+
+    "symmetry": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["available", "score", "band", "components", "confidence", "disclaimer"],
+          "properties": {
+            "available": { "const": true },
+            "score": { "type": "integer", "minimum": 0, "maximum": 100, "description": "Higher = more symmetric." },
+            "band": { "enum": ["symmetric", "mild_asymmetry", "notable_asymmetry"] },
+            "components": {
+              "type": "object",
+              "properties": {
+                "hip_drop": { "type": "integer", "minimum": 0, "maximum": 100 },
+                "pronation": { "type": "integer", "minimum": 0, "maximum": 100 },
+                "knee_valgus": { "type": "integer", "minimum": 0, "maximum": 100 }
+              },
+              "additionalProperties": false,
+              "minProperties": 2
+            },
+            "confidence": { "$ref": "#/$defs/confidence" },
+            "disclaimer": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["available", "reason"],
+          "properties": {
+            "available": { "const": false },
+            "reason": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "curve": {
+      "type": "array",
+      "minItems": 21,
+      "maxItems": 21,
+      "items": { "type": ["number", "null"] }
+    },
+
+    "leg_curves": {
+      "type": "object",
+      "required": ["hip_drop_deg", "pronation_deg", "knee_valgus_deg"],
+      "properties": {
+        "hip_drop_deg": { "$ref": "#/$defs/curve" },
+        "pronation_deg": { "$ref": "#/$defs/curve" },
+        "knee_valgus_deg": { "$ref": "#/$defs/curve" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

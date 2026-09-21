@@ -114,6 +114,10 @@ def raw_video_key(run_id: str) -> str:
     return f"raw/{run_id}/input.mp4"
 
 
+def rear_video_key(run_id: str) -> str:
+    return f"raw/{run_id}/rear.mp4"
+
+
 def annotated_video_key(run_id: str) -> str:
     return f"processed/{run_id}/annotated.mp4"
 

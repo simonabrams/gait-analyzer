@@ -46,9 +46,16 @@ app.conf.accept_content = ["json"]
 app.conf.result_expires = 3600
 # Default to 1 to avoid OOM when API and worker share a container (CLI -c overrides this).
 app.conf.worker_concurrency = int(os.environ.get("CELERY_WORKER_CONCURRENCY", "1"))
+# Register the rear-view task (backend/rear_worker.py). It lives in its own module
+# and imports `app` from here, so it's pulled in by the worker at startup rather
+# than imported at the bottom of this file. It runs on its own queue, which the
+# worker must consume: `-Q celery,rear_view` (render.yaml, docker-compose.yml).
+app.conf.include = ["backend.rear_worker"]
 
 # Track the run_id currently being processed so the SIGTERM handler can mark it failed.
 _current_run_id: str | None = None
+# Same, for an in-flight rear-view task (which owns a run_videos row, not the run).
+_current_rear_run_id: str | None = None
 
 
 def _refund_free_scan(db, run: Run) -> None:
@@ -131,6 +138,21 @@ def _handle_sigterm(signum, frame):
             db.close()
         except Exception:
             logger.warning("Failed to mark run %s failed during SIGTERM shutdown", _current_run_id, exc_info=True)
+    if _current_rear_run_id:
+        try:
+            from backend.rear_worker import _rear_row, mark_rear_failed
+
+            db = get_db_session()
+            row = _rear_row(db, _current_rear_run_id)
+            if row and row.status == "processing":
+                mark_rear_failed(db, row, "Worker was restarted during processing. Please re-submit.")
+            db.close()
+        except Exception:
+            logger.warning(
+                "Failed to mark rear video for run %s failed during SIGTERM shutdown",
+                _current_rear_run_id,
+                exc_info=True,
+            )
     raise SystemExit(0)
 
 

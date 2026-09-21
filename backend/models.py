@@ -4,7 +4,7 @@ SQLAlchemy ORM models for gait analyzer.
 import enum
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, Column, DateTime, Enum, Index, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, Enum, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import declarative_base
 
@@ -37,6 +37,48 @@ class Run(Base):
 
     __table_args__ = (
         Index("ix_runs_user_id_created_at", "user_id", "created_at"),
+    )
+
+
+class VideoViewType(str, enum.Enum):
+    side = "side"
+    rear = "rear"
+
+
+class RunVideo(Base):
+    """One stored video per (run, camera view). A run has a side video (always)
+    and may have a rear video (optional, added independently — never blocks or
+    is blocked by the side analysis).
+
+    Side rows are a registry of the stored key only: the side pipeline's status,
+    progress and results still live on `runs` (status/progress_pct/results_json),
+    so side rows have NULL status/results_json. Rear rows own their status and
+    results_json (the `rear_view` object — see backend/rear_metrics.py), which is
+    what lets the rear task run and fail without touching `runs`. The API merges
+    a rear row into the run's results at read time (backend/results_schema.py).
+    """
+    __tablename__ = "run_videos"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    run_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Plain string (see Subscription.tier for why not a native Postgres enum);
+    # values are VideoViewType.
+    view_type = Column(String(16), nullable=False)
+    r2_key = Column(String(512), nullable=False)
+    # Rear rows: "processing" | "complete" | "failed" (RunStatus values). NULL for side rows.
+    status = Column(String(20), nullable=True)
+    error_message = Column(Text, nullable=True)
+    results_json = Column(JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        # Also serves lookups by run_id alone (leading column), so no separate run_id index.
+        Index("ix_run_videos_run_id_view_type", "run_id", "view_type", unique=True),
+        CheckConstraint("view_type IN ('side', 'rear')", name="ck_run_videos_view_type"),
     )
 
 
