@@ -16,6 +16,9 @@ class RunStatusResponse(BaseModel):
     status: str
     progress: int
     preprocessing_warning: Optional[str] = None
+    # State of the optional rear-view video: None (no rear video),
+    # "processing", "complete" or "failed". Independent of `status`.
+    rear_status: Optional[str] = None
 
 
 class RunListItem(BaseModel):
@@ -38,6 +41,11 @@ class RunListResponse(BaseModel):
 class RunCreatedResponse(BaseModel):
     run_id: UUID
     status: str = "processing"
+
+
+class RearVideoCreatedResponse(BaseModel):
+    run_id: UUID
+    rear_status: str = "processing"
 
 
 class RunDetail(BaseModel):

@@ -1,0 +1,363 @@
+{
+  "meta": {
+    "height_cm": 175,
+    "video_file": "input.mp4",
+    "analyzed_at": "2026-09-21T12:00:00+00:00",
+    "fps": 30.0,
+    "num_frames": 451,
+    "confidence_gate": {
+      "hard_fail": false,
+      "low_confidence": false,
+      "reason": null,
+      "reason_metric": null,
+      "detected_stride_count": 20,
+      "usable_stride_count": 20,
+      "computed_cadence": 171,
+      "user_message": null
+    }
+  },
+  "summary": {
+    "cadence_avg": 171,
+    "vertical_osc_avg_cm": 8,
+    "knee_angle_strike_avg_deg": 22,
+    "foot_strike_position_avg_cm": 6,
+    "trunk_lean_avg_deg": 5,
+    "num_strides": 20,
+    "num_strides_detected": 20,
+    "cadence_confidence": 0.883
+  },
+  "flags": [],
+  "strides": [
+    {
+      "cadence": 171.4,
+      "vertical_osc_cm": 8.1,
+      "knee_angle_strike_deg": 21.5,
+      "foot_strike_position_cm": 6.2,
+      "trunk_lean_deg": 5.4,
+      "duration_sec": 0.7,
+      "stride_num": 1,
+      "start_frame": 10,
+      "end_frame": 31
+    },
+    {
+      "cadence": 171.0,
+      "vertical_osc_cm": 8.1,
+      "knee_angle_strike_deg": 21.5,
+      "foot_strike_position_cm": 6.2,
+      "trunk_lean_deg": 5.4,
+      "duration_sec": 0.7,
+      "stride_num": 2,
+      "start_frame": 31,
+      "end_frame": 52
+    },
+    {
+      "cadence": 171.70000000000002,
+      "vertical_osc_cm": 8.1,
+      "knee_angle_strike_deg": 21.5,
+      "foot_strike_position_cm": 6.2,
+      "trunk_lean_deg": 5.4,
+      "duration_sec": 0.7,
+      "stride_num": 3,
+      "start_frame": 52,
+      "end_frame": 73
+    }
+  ],
+  "schema_version": 2,
+  "rear_view": {
+    "status": "ok",
+    "meta": {
+      "video_file": "rear.mp4",
+      "analyzed_at": "2026-09-21T21:47:05.598770+00:00",
+      "fps": 30.0,
+      "num_frames": 330,
+      "cycle_normalisation": "percent_gait_cycle",
+      "synchronized_with_side_view": false,
+      "note": "Rear-view results come from a separate recording and are not frame-matched to the side-view video; both are expressed as % of the gait cycle.",
+      "left_right_consistency": 1.0,
+      "left_right_labels_swapped": false
+    },
+    "confidence_gate": {
+      "status": "ok",
+      "reason": null,
+      "user_message": null,
+      "usable_cycles": {
+        "left": 14,
+        "right": 15
+      },
+      "left_right_consistency": 1.0
+    },
+    "legs": {
+      "left": {
+        "cycles_detected": 14,
+        "cycles_usable": 14,
+        "stance_pct": 42.9,
+        "midstance_pct": 19.0,
+        "hip_drop": {
+          "available": true,
+          "value_deg": 4,
+          "pattern": "typical",
+          "window_pct": [
+            19.0,
+            19.0
+          ],
+          "cycles_used": 14,
+          "error_margin_deg": null,
+          "confidence": {
+            "score": 0.9,
+            "tier": "moderate"
+          },
+          "disclaimer": "Estimated from the height difference between your hips in a rear-view video. Best used to spot side-to-side differences and changes between sessions."
+        },
+        "pronation": {
+          "available": true,
+          "value_deg": 6,
+          "pattern": "neutral",
+          "window_pct": [
+            0.0,
+            19.0
+          ],
+          "cycles_used": 14,
+          "error_margin_deg": null,
+          "confidence": {
+            "score": 0.9,
+            "tier": "low"
+          },
+          "disclaimer": "A rough proxy from the angle of your ankle-to-heel line, which is short and hard to track from a phone camera. Treat it as a pattern, not an angle. Best used to spot side-to-side differences and changes between sessions."
+        },
+        "knee_valgus": {
+          "available": true,
+          "value_deg": 5,
+          "pattern": "neutral",
+          "window_pct": [
+            0.0,
+            19.0
+          ],
+          "cycles_used": 14,
+          "error_margin_deg": 19.0,
+          "confidence": {
+            "score": 0.9,
+            "tier": "moderate"
+          },
+          "disclaimer": "Knee angles from a single camera can be off by roughly \u00b119\u00b0 vs. lab-grade motion capture, so treat this as a pattern, not a precise angle. Best used to spot side-to-side differences and changes between sessions."
+        },
+        "reportable": true
+      },
+      "right": {
+        "cycles_detected": 15,
+        "cycles_usable": 15,
+        "stance_pct": 47.6,
+        "midstance_pct": 21.4,
+        "hip_drop": {
+          "available": true,
+          "value_deg": 11,
+          "pattern": "elevated",
+          "window_pct": [
+            21.4,
+            21.4
+          ],
+          "cycles_used": 15,
+          "error_margin_deg": null,
+          "confidence": {
+            "score": 0.9,
+            "tier": "moderate"
+          },
+          "disclaimer": "Estimated from the height difference between your hips in a rear-view video. Best used to spot side-to-side differences and changes between sessions."
+        },
+        "pronation": {
+          "available": true,
+          "value_deg": 8,
+          "pattern": "neutral",
+          "window_pct": [
+            0.0,
+            21.4
+          ],
+          "cycles_used": 15,
+          "error_margin_deg": null,
+          "confidence": {
+            "score": 0.9,
+            "tier": "low"
+          },
+          "disclaimer": "A rough proxy from the angle of your ankle-to-heel line, which is short and hard to track from a phone camera. Treat it as a pattern, not an angle. Best used to spot side-to-side differences and changes between sessions."
+        },
+        "knee_valgus": {
+          "available": true,
+          "value_deg": 15,
+          "pattern": "valgus_pattern",
+          "window_pct": [
+            0.0,
+            21.4
+          ],
+          "cycles_used": 15,
+          "error_margin_deg": 19.0,
+          "confidence": {
+            "score": 0.9,
+            "tier": "moderate"
+          },
+          "disclaimer": "Knee angles from a single camera can be off by roughly \u00b119\u00b0 vs. lab-grade motion capture, so treat this as a pattern, not a precise angle. Best used to spot side-to-side differences and changes between sessions."
+        },
+        "reportable": true
+      }
+    },
+    "symmetry": {
+      "available": true,
+      "score": 26,
+      "band": "notable_asymmetry",
+      "components": {
+        "hip_drop": 6,
+        "pronation": 71,
+        "knee_valgus": 1
+      },
+      "confidence": {
+        "score": 0.9,
+        "tier": "low"
+      },
+      "disclaimer": "Combines the three rear-view patterns above, so it carries all of their uncertainty. Best used to spot side-to-side differences and changes between sessions."
+    },
+    "curves": {
+      "step_pct": 5,
+      "unit": "deg",
+      "left": {
+        "hip_drop_deg": [
+          -1.8,
+          3.3,
+          3.7,
+          3.9,
+          4.0,
+          3.8,
+          3.5,
+          2.9,
+          2.3,
+          1.5,
+          -3.5,
+          -8.9,
+          -10.1,
+          -10.8,
+          -10.9,
+          -10.5,
+          -9.6,
+          -8.1,
+          -6.3,
+          -4.1,
+          -1.8
+        ],
+        "pronation_deg": [
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0,
+          6.0
+        ],
+        "knee_valgus_deg": [
+          4.6,
+          4.5,
+          4.5,
+          4.5,
+          4.5,
+          4.5,
+          4.5,
+          4.6,
+          4.8,
+          5.4,
+          6.1,
+          7.1,
+          8.0,
+          8.8,
+          8.9,
+          8.4,
+          7.5,
+          6.5,
+          5.7,
+          5.1,
+          4.6
+        ]
+      },
+      "right": {
+        "hip_drop_deg": [
+          -1.1,
+          8.1,
+          9.7,
+          10.6,
+          10.9,
+          10.8,
+          10.1,
+          8.8,
+          7.2,
+          5.2,
+          2.9,
+          -1.0,
+          -3.5,
+          -3.8,
+          -4.0,
+          -3.9,
+          -3.7,
+          -3.2,
+          -2.6,
+          -1.9,
+          -1.1
+        ],
+        "pronation_deg": [
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0
+        ],
+        "knee_valgus_deg": [
+          14.5,
+          13.4,
+          13.3,
+          13.3,
+          13.3,
+          13.3,
+          13.3,
+          13.3,
+          13.8,
+          15.2,
+          17.0,
+          19.5,
+          22.3,
+          24.8,
+          26.1,
+          25.5,
+          23.3,
+          20.6,
+          18.0,
+          16.0,
+          14.5
+        ]
+      }
+    }
+  }
+}

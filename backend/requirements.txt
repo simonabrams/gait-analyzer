@@ -53,6 +53,12 @@ cryptography>=42.0.0
 # Dev / CI
 pytest>=7.0.0
 pytest-cov>=4.0.0
+# Validates the results JSON against backend/schema/results.schema.json
+jsonschema>=4.18.0
+# fastapi.testclient.TestClient (test_rear_video_api.py) requires an HTTP client;
+# Starlette 1.x deprecated `httpx` in favor of `httpx2` (same maintainers, PyPI:
+# github.com/pydantic/httpx2) and errors without one installed at all.
+httpx2>=2.0.0
 # Pinned: no ruff config exists, so default-rule changes in new releases break
 # CI on untouched code (0.16.0 introduced 97 new findings). Bump deliberately.
 ruff==0.15.20
