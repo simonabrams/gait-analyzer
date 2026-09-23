@@ -145,3 +145,24 @@ def test_task_is_registered_on_its_own_queue_and_name():
     assert rear_worker.process_rear_video.name == "backend.rear_worker.process_rear_video"
     assert rear_worker.process_rear_video.queue == "rear_view"
     assert worker.app.conf.include == ["backend.rear_worker"]
+
+
+# ---- _limits_from_env: rear fps override --------------------------------------------------
+def test_gait_rear_target_fps_overrides_gait_target_fps(monkeypatch):
+    monkeypatch.setenv("GAIT_TARGET_FPS", "15")
+    monkeypatch.setenv("GAIT_REAR_TARGET_FPS", "30")
+    assert rear_worker._limits_from_env() == (None, None, 30.0)
+
+
+def test_falls_back_to_gait_target_fps_when_rear_override_unset(monkeypatch):
+    monkeypatch.delenv("GAIT_REAR_TARGET_FPS", raising=False)
+    monkeypatch.setenv("GAIT_TARGET_FPS", "15")
+    assert rear_worker._limits_from_env() == (None, None, 15.0)
+
+
+def test_max_frames_and_width_stay_shared_with_the_side_pipeline(monkeypatch):
+    monkeypatch.setenv("GAIT_MAX_FRAMES", "900")
+    monkeypatch.setenv("GAIT_MAX_WIDTH", "1280")
+    monkeypatch.delenv("GAIT_TARGET_FPS", raising=False)
+    monkeypatch.delenv("GAIT_REAR_TARGET_FPS", raising=False)
+    assert rear_worker._limits_from_env() == (900, 1280, None)

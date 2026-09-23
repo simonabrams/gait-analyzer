@@ -64,11 +64,19 @@ def _capture(db, run_id: str, event: str, props: dict) -> None:
 
 
 def _limits_from_env():
+    """GAIT_MAX_FRAMES/GAIT_MAX_WIDTH are shared with the side pipeline (worker.py) —
+    same memory ceiling applies to either video. Target fps is NOT shared: a rear
+    gait cycle is only ~10-11 frames at the side pipeline's proven GAIT_TARGET_FPS
+    (e.g. 15), which is too coarse for the initial-contact/mid-stance windows
+    rear_metrics measures (see rear_metrics.py's cycle-segmentation comments).
+    GAIT_REAR_TARGET_FPS overrides just this pipeline; unset, it falls back to
+    GAIT_TARGET_FPS so today's behavior is unchanged until someone sets it."""
     max_frames = max_width = target_fps = None
     try:
         nf = int(os.environ.get("GAIT_MAX_FRAMES", "0"))
         nw = int(os.environ.get("GAIT_MAX_WIDTH", "0"))
-        tf = float(os.environ.get("GAIT_TARGET_FPS", "0"))
+        raw_tf = os.environ.get("GAIT_REAR_TARGET_FPS") or os.environ.get("GAIT_TARGET_FPS", "0")
+        tf = float(raw_tf)
         max_frames = nf if nf > 0 else None
         max_width = nw if nw > 0 else None
         target_fps = tf if tf > 0 else None
