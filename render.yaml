@@ -110,6 +110,11 @@ services:
       - key: GAIT_MAX_WIDTH
         sync: false
       # Subsample video to this many frames per second before pose extraction (e.g. 10).
-      # Reduces memory and CPU significantly; 8-10 fps is sufficient for gait analysis.
+      # Reduces memory and CPU significantly; 8-10 fps is sufficient for the side pipeline.
       - key: GAIT_TARGET_FPS
+        sync: false
+      # Optional: overrides GAIT_TARGET_FPS for the rear-view pipeline only (falls back to
+      # it if unset). A rear gait cycle is much shorter in frames than a side stride at the
+      # same fps, so it benefits from a higher rate — try ~30 (see backend/rear_worker.py).
+      - key: GAIT_REAR_TARGET_FPS
         sync: false
