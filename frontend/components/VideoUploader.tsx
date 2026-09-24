@@ -17,6 +17,7 @@ import {
   isHeightInRange,
   type HeightUnit,
 } from "@/lib/height";
+import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_SIZE_BYTES } from "@/lib/videoValidation";
 import ConsentModal from "@/components/ConsentModal";
 import UpgradeModal from "@/components/UpgradeModal";
 import posthog from "posthog-js";
@@ -29,12 +30,6 @@ function getProcessingStage(pct: number): string {
   if (pct >= 10) return "Extracting pose data…";
   return "Preprocessing video…";
 }
-
-const ALLOWED = { "video/mp4": [".mp4"], "video/quicktime": [".mov"] };
-// Sized for the 10-15s clip we now recommend (see HomeClient/about-page copy),
-// not the old 30-60s guidance — generous headroom over what that actually
-// produces, not a hard technical ceiling.
-const MAX_SIZE = 100 * 1024 * 1024;
 
 export default function VideoUploader({
   onComplete,
@@ -112,8 +107,8 @@ export default function VideoUploader({
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: ALLOWED,
-    maxSize: MAX_SIZE,
+    accept: ALLOWED_VIDEO_TYPES,
+    maxSize: MAX_VIDEO_SIZE_BYTES,
     maxFiles: 1,
     multiple: false,
     disabled: isActive,

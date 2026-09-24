@@ -9,6 +9,8 @@ import PdfReportButton from "@/components/PdfReportButton";
 import AccuracyBanner from "@/components/AccuracyBanner";
 import ClaimBanner from "@/components/ClaimBanner";
 import DeleteScanButton from "@/components/DeleteScanButton";
+import AddRearVideoControl from "@/components/AddRearVideoControl";
+import RearViewSection from "@/components/RearViewSection";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -48,6 +50,30 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 function SectionEyebrow({ label }: { label: string }) {
   return (
     <p className="text-xs font-semibold tracking-widest text-primary uppercase">{label}</p>
+  );
+}
+
+/** One bordered/black video box, matching the page's pre-existing single-video
+ * styling exactly. `label` is only shown once there's a second video to tell
+ * apart from (see the grid vs. single-video branch below) — with no rear
+ * video, this renders pixel-identical to how the page looked before. */
+function AnnotatedVideo({ src, label }: { src: string; label: string | null }) {
+  return (
+    <div className="relative bg-black rounded-xl overflow-hidden border border-white/10 flex justify-center">
+      <video src={src} controls className="max-h-[520px] w-auto" preload="metadata">
+        Your browser does not support the video tag.
+      </video>
+      <div className="absolute bottom-3 left-3 flex items-center gap-2 pointer-events-none">
+        {label && (
+          <span className="text-xs font-semibold tracking-widest text-white/70 uppercase bg-black/60 px-2 py-1 rounded">
+            {label}
+          </span>
+        )}
+        <span className="text-xs font-semibold tracking-widest text-primary uppercase bg-black/60 px-2 py-1 rounded">
+          Skeleton Overlay
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -152,24 +178,20 @@ export default async function RunResultPage({ params, searchParams }: Props) {
         </div>
       </div>
 
-      {/* Annotated video */}
+      {/* Annotated video(s) — side-by-side once a rear video exists, otherwise
+          the same single centered video as always (no visual change). */}
       {run.annotated_video_url && (
-        <div className="relative bg-black rounded-xl overflow-hidden border border-white/10 flex justify-center">
-          <video
-            src={run.annotated_video_url}
-            controls
-            className="max-h-[520px] w-auto"
-            preload="metadata"
-          >
-            Your browser does not support the video tag.
-          </video>
-          <div className="absolute bottom-3 left-3 flex items-center gap-2 pointer-events-none">
-            <span className="text-xs font-semibold tracking-widest text-primary uppercase bg-black/60 px-2 py-1 rounded">
-              Skeleton Overlay
-            </span>
-          </div>
+        <div
+          className={
+            run.rear_video_url ? "grid grid-cols-1 md:grid-cols-2 gap-4" : "flex justify-center"
+          }
+        >
+          <AnnotatedVideo src={run.annotated_video_url} label={run.rear_video_url ? "Side View" : null} />
+          {run.rear_video_url && <AnnotatedVideo src={run.rear_video_url} label="Rear View" />}
         </div>
       )}
+
+      <AddRearVideoControl runId={id} />
 
       {hasData ? (
         <>
@@ -296,6 +318,18 @@ export default async function RunResultPage({ params, searchParams }: Props) {
               Try another video →
             </Link>
           </div>
+        </div>
+      )}
+
+      {/* Rear-view patterns — independent of the side view's own hasData/gate:
+          a rear scan can succeed even when the side one didn't, and vice versa. */}
+      {run.results?.rear_view && !["processing", "failed"].includes(run.results.rear_view.status) && (
+        <div className="space-y-4">
+          <div>
+            <SectionEyebrow label="Rear View" />
+            <h2 className="text-xl font-semibold text-white mt-1">Frontal-Plane Patterns</h2>
+          </div>
+          <RearViewSection rearView={run.results.rear_view} />
         </div>
       )}
 

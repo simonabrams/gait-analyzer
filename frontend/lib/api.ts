@@ -19,6 +19,77 @@ export interface RunStatus {
   status: string;
   progress: number;
   preprocessing_warning: string | null;
+  // State of the optional rear-view video: null (none added), "processing",
+  // "complete" or "failed" — independent of `status` above.
+  rear_status: string | null;
+  // True only when the caller's credentials (token or anon id, whichever was
+  // sent) match this run's owner. Always false with no credentials at all —
+  // this endpoint stays public/pollable by anyone with the link.
+  is_owner: boolean;
+}
+
+export interface RearVideoCreated {
+  run_id: string;
+  rear_status: string;
+}
+
+export type RearMetricTier = "low" | "moderate" | "high";
+
+export interface RearMetricConfidence {
+  score: number;
+  tier: RearMetricTier;
+}
+
+/** One frontal-plane metric for one leg (backend/rear_metrics.py). Value is a
+ * pattern indicator, not a precise angle — see `disclaimer` and
+ * `error_margin_deg` (null where no validated margin exists). */
+export type RearMetric =
+  | {
+      available: true;
+      value_deg: number;
+      pattern: string;
+      cycles_used: number;
+      error_margin_deg: number | null;
+      confidence: RearMetricConfidence;
+      disclaimer: string;
+    }
+  | { available: false; reason: string };
+
+export interface RearLeg {
+  cycles_detected: number;
+  cycles_usable: number;
+  reportable: boolean;
+  hip_drop: RearMetric;
+  pronation: RearMetric;
+  knee_valgus: RearMetric;
+}
+
+export type RearSymmetry =
+  | {
+      available: true;
+      score: number;
+      band: string;
+      components: Record<string, number>;
+      confidence: RearMetricConfidence;
+      disclaimer: string;
+    }
+  | { available: false; reason: string };
+
+/** results.rear_view, as merged in by backend/results_schema.py. Only `status`
+ * is guaranteed — a still-processing or failed rear video has no legs/symmetry
+ * at all (see backend/schema/results.schema.json's rear_view_pending/_failed).
+ * Scoped to what the UI renders today, not a full mirror of the schema
+ * (e.g. `curves`, per-metric `window_pct` aren't typed since nothing reads them yet). */
+export interface RearView {
+  status: "ok" | "low_confidence" | "insufficient_data" | "processing" | "failed";
+  error?: string;
+  confidence_gate?: {
+    status: string;
+    reason: string | null;
+    user_message: string | null;
+  };
+  legs?: { left: RearLeg; right: RearLeg };
+  symmetry?: RearSymmetry;
 }
 
 export interface RunListItem {
@@ -43,13 +114,18 @@ export interface RunDetail {
   height_cm: number;
   status: string;
   results: {
+    schema_version?: number;
     summary?: Record<string, unknown>;
     flags?: Array<{ metric: string; value: unknown; threshold: unknown; recommendation: string }>;
     strides?: unknown[];
     meta?: Record<string, unknown>;
+    rear_view?: RearView | null;
   } | null;
   annotated_video_url: string | null;
   dashboard_image_url: string | null;
+  // Skeleton-overlay rear-view video, set only once a rear video exists and
+  // has finished processing (mirrors annotated_video_url's gating).
+  rear_video_url: string | null;
   error_message: string | null;
 }
 
@@ -191,9 +267,67 @@ export function createRunWithProgress(
   });
 }
 
-/** Poll run status. Public — no auth required. */
-export async function getRunStatus(id: string): Promise<RunStatus> {
-  return fetchApi<RunStatus>(`/api/runs/${id}/status`);
+/**
+ * Add an optional rear-view video to an existing run, with XHR upload progress
+ * (see createRunWithProgress — same reasoning: fetch has no upload progress
+ * event). Requires ownership: a valid Clerk Bearer token, or (for a run made
+ * without an account) the anon id that created it — POST /api/runs/{id}/rear-video
+ * 404s otherwise, without leaking whether the run exists (see backend/main.py).
+ * 409 (code "rear_video_exists") means one's already attached and isn't in a
+ * failed state; a failed one may be retried by calling this again.
+ */
+export function addRearVideoWithProgress(
+  runId: string,
+  formData: FormData,
+  token: string | undefined,
+  anonId: string | undefined,
+  onUploadProgress: (pct: number) => void,
+): Promise<RearVideoCreated> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}/api/runs/${runId}/rear-video`);
+    if (token) {
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    } else if (anonId) {
+      xhr.setRequestHeader("X-Anon-Id", anonId);
+    }
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable) {
+        onUploadProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as RearVideoCreated);
+        } catch {
+          reject(new Error("Invalid response from server"));
+        }
+      } else {
+        let parsed: { message: string; code?: string } = { message: `HTTP ${xhr.status}` };
+        try {
+          parsed = parseErrorDetail(JSON.parse(xhr.responseText), `HTTP ${xhr.status}`);
+        } catch {
+          // response wasn't JSON; fall back to the generic HTTP status message
+        }
+        reject(new ApiError(parsed.message, xhr.status, parsed.code));
+      }
+    });
+
+    xhr.addEventListener("error", () => reject(new Error("Upload failed")));
+    xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
+
+    xhr.send(formData);
+  });
+}
+
+/** Poll run status. Public — no auth required, but pass whatever credential
+ * the caller has (token if signed in, else anon id) so `is_owner` resolves
+ * correctly; omitting both still works, `is_owner` just comes back false. */
+export async function getRunStatus(id: string, token?: string, anonId?: string): Promise<RunStatus> {
+  return fetchApi<RunStatus>(`/api/runs/${id}/status`, undefined, token, anonId);
 }
 
 /** Get full run detail. Public — anyone with the UUID can view (enables sharing). */
