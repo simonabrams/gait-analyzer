@@ -19,6 +19,12 @@ class RunStatusResponse(BaseModel):
     # State of the optional rear-view video: None (no rear video),
     # "processing", "complete" or "failed". Independent of `status`.
     rear_status: Optional[str] = None
+    # True only when the caller's resolved identity (Clerk user or anon id,
+    # whichever credential was sent — see anon.resolve_user_id_optional)
+    # matches this run's owner. This endpoint is public and callable with no
+    # credentials at all (e.g. a stranger viewing a shared link), in which
+    # case this is always False rather than raising.
+    is_owner: bool = False
 
 
 class RunListItem(BaseModel):
@@ -57,6 +63,9 @@ class RunDetail(BaseModel):
     results: Optional[dict[str, Any]] = None
     annotated_video_url: Optional[str] = None
     dashboard_image_url: Optional[str] = None
+    # Skeleton-overlay rear-view video, set only once a rear video exists and
+    # has finished processing (mirrors annotated_video_url's gating).
+    rear_video_url: Optional[str] = None
     error_message: Optional[str] = None
 
 

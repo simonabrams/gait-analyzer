@@ -2,6 +2,8 @@
 / pose extraction mocked out (SQLite in memory, same approach as
 test_rear_video_api.py). The property that matters: whatever happens to the rear
 video, the side run's row is left exactly as the side pipeline left it."""
+import os
+import tempfile
 import uuid
 from unittest.mock import MagicMock
 
@@ -18,6 +20,26 @@ from backend.models import Base, Run, RunStatus, RunVideo, Subscription, Subscri
 REAR_VIEW = {"status": "ok", "confidence_gate": {"reason": None}, "meta": {}}
 
 
+def _touch_temp_file():
+    fd, path = tempfile.mkstemp(prefix="test_rear_annotated_")
+    os.close(fd)
+    return path
+
+
+def _analysis_result(rear_view=None, frames_used=300, truncated=False, annotated_video_path=None, extra_temp=None):
+    """A run_rear_analysis()-shaped return value, with real temp files on disk
+    (so cleanup can be verified by checking they're actually gone afterward)."""
+    ann_path = annotated_video_path or _touch_temp_file()
+    temp_paths = [ann_path] + (extra_temp or [])
+    return {
+        "rear_view": rear_view if rear_view is not None else dict(REAR_VIEW, meta={}),
+        "frames_used": frames_used,
+        "truncated": truncated,
+        "annotated_video_path": ann_path,
+        "temp_paths": temp_paths,
+    }
+
+
 @compiles(JSONB, "sqlite")
 def _jsonb_as_json(type_, compiler, **kw):
     return "JSON"
@@ -31,6 +53,8 @@ def env(monkeypatch):
     monkeypatch.setattr(rear_worker, "get_db_session", Session)
     monkeypatch.setattr(rear_worker, "download_file", MagicMock())
     monkeypatch.setattr(rear_worker, "preprocess_video", MagicMock(return_value={}))
+    uploads = []
+    monkeypatch.setattr(rear_worker, "upload_file", lambda path, key: uploads.append((path, key)))
     captured = MagicMock()
     monkeypatch.setattr(rear_worker, "posthog_capture", captured)
 
@@ -43,7 +67,9 @@ def env(monkeypatch):
                    results_json={"summary": {"cadence_avg": 171}}))
         db.add(RunVideo(run_id=run_id, view_type="rear", r2_key=f"raw/{run_id}/rear.mp4", status="processing"))
         db.commit()
-    return type("Env", (), {"Session": Session, "run_id": str(run_id), "user_id": user_id, "capture": captured})
+    return type("Env", (), {
+        "Session": Session, "run_id": str(run_id), "user_id": user_id, "capture": captured, "uploads": uploads,
+    })
 
 
 def _side_snapshot(env):
@@ -59,8 +85,8 @@ def _rear(env):
 
 
 def test_success_stores_the_rear_view_and_marks_complete(env, monkeypatch):
-    monkeypatch.setattr(rear_worker, "run_rear_analysis",
-                        MagicMock(return_value={"rear_view": dict(REAR_VIEW, meta={}), "frames_used": 300, "truncated": False}))
+    result = _analysis_result()
+    monkeypatch.setattr(rear_worker, "run_rear_analysis", MagicMock(return_value=result))
     before = _side_snapshot(env)
     rear_worker.process_rear_video.run(env.run_id, f"raw/{env.run_id}/rear.mp4")
     row = _rear(env)
@@ -70,11 +96,22 @@ def test_success_stores_the_rear_view_and_marks_complete(env, monkeypatch):
     env.capture.assert_called_once_with(env.user_id, "rear_run_completed", {"rear_status": "ok", "reason": None})
 
 
+def test_success_uploads_the_annotated_video_and_cleans_up_temp_files(env, monkeypatch):
+    result = _analysis_result(extra_temp=[_touch_temp_file()])
+    monkeypatch.setattr(rear_worker, "run_rear_analysis", MagicMock(return_value=result))
+    rear_worker.process_rear_video.run(env.run_id, "k")
+    row = _rear(env)
+    expected_key = f"processed/{env.run_id}/rear_annotated.mp4"
+    assert row.annotated_r2_key == expected_key
+    assert env.uploads == [(result["annotated_video_path"], expected_key)]
+    for p in result["temp_paths"]:
+        assert not os.path.exists(p)
+
+
 def test_insufficient_data_is_still_a_completed_task(env, monkeypatch):
     """The task ran fine; the *analysis* couldn't say anything. That's rear_view.status, not a task failure."""
     rv = {"status": "insufficient_data", "confidence_gate": {"reason": "insufficient_cycles"}, "meta": {}}
-    monkeypatch.setattr(rear_worker, "run_rear_analysis",
-                        MagicMock(return_value={"rear_view": rv, "frames_used": 40, "truncated": False}))
+    monkeypatch.setattr(rear_worker, "run_rear_analysis", MagicMock(return_value=_analysis_result(rear_view=rv, frames_used=40)))
     rear_worker.process_rear_video.run(env.run_id, "k")
     row = _rear(env)
     assert row.status == "complete" and row.results_json["status"] == "insufficient_data"
@@ -87,8 +124,10 @@ def test_failure_fails_only_the_rear_video_and_never_touches_the_side_run_or_ref
         rear_worker.process_rear_video.run(env.run_id, "k")
     row = _rear(env)
     assert row.status == "failed" and "Could not open video" in row.error_message and row.results_json is None
+    assert row.annotated_r2_key is None
     assert _side_snapshot(env) == before  # status, progress, results, error_message, free_scans_used all unchanged
     env.capture.assert_called_once_with(env.user_id, "rear_run_failed", {"error_type": "RuntimeError"})
+    assert env.uploads == []
 
 
 def test_long_error_text_is_capped(env, monkeypatch):
@@ -118,8 +157,7 @@ def test_task_for_a_deleted_run_is_a_no_op(env, monkeypatch):
 
 
 def test_current_rear_run_marker_is_cleared_after_success_and_failure(env, monkeypatch):
-    monkeypatch.setattr(rear_worker, "run_rear_analysis",
-                        MagicMock(return_value={"rear_view": dict(REAR_VIEW, meta={}), "frames_used": 1, "truncated": False}))
+    monkeypatch.setattr(rear_worker, "run_rear_analysis", MagicMock(return_value=_analysis_result(frames_used=1)))
     rear_worker.process_rear_video.run(env.run_id, "k")
     assert worker._current_rear_run_id is None
     monkeypatch.setattr(rear_worker, "run_rear_analysis", MagicMock(side_effect=RuntimeError("x")))
