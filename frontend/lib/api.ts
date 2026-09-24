@@ -33,6 +33,26 @@ export interface RearVideoCreated {
   rear_status: string;
 }
 
+export interface FlagExercise {
+  name: string;
+  description: string;
+}
+
+/** One entry from results.flags (backend/heuristics.py). Most flags carry
+ * `severity` and `exercises`; the special `cadence_confidence` flag (a
+ * measurement-reliability warning, not a performance finding) carries
+ * neither — callers building a severity-sorted "what to work on" list should
+ * filter to flags that have `severity` rather than assume every flag fits
+ * that shape. */
+export interface Flag {
+  metric: string;
+  value: unknown;
+  threshold: unknown;
+  severity?: "severe" | "moderate";
+  recommendation: string;
+  exercises?: FlagExercise[];
+}
+
 export type RearMetricTier = "low" | "moderate" | "high";
 
 export interface RearMetricConfidence {
@@ -116,7 +136,7 @@ export interface RunDetail {
   results: {
     schema_version?: number;
     summary?: Record<string, unknown>;
-    flags?: Array<{ metric: string; value: unknown; threshold: unknown; recommendation: string }>;
+    flags?: Flag[];
     strides?: unknown[];
     meta?: Record<string, unknown>;
     rear_view?: RearView | null;

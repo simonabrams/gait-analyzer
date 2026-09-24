@@ -1,152 +1,94 @@
-import MetricTooltip from "@/components/MetricTooltip";
-import { computeArcGeometry, RING_GOOD_COLOR, RING_WARN_COLOR } from "@/lib/arcRing";
+import type { Flag } from "@/lib/api";
 import { METRIC_TARGETS } from "@/lib/metricTargets";
+import { STATUS_BADGE_CLASSES, STATUS_LABEL, statusForMetric } from "@/lib/gaitStatus";
+import MetricTooltip from "@/components/MetricTooltip";
 
 interface MetricCardsProps {
   summary: Record<string, unknown> | undefined;
+  flags: Flag[] | undefined;
 }
 
-const CONFIG = [
+// Which flag(s) a tile's status comes from — includes the merged-flag name
+// (see gaitStatus.ts) for metrics that can fold together in heuristics.py.
+const TILE_CONFIG = [
   {
-    label: "CADENCE",
-    key: METRIC_TARGETS.cadence.key,
-    unit: METRIC_TARGETS.cadence.unit,
-    tooltip:
-      "Measured by detecting stride cycles in your video. Accurate to ±2–3% under good filming conditions. Best validated metric in video-based analysis.",
-    disclaimer: null,
-    good: METRIC_TARGETS.cadence.good,
-    score: METRIC_TARGETS.cadence.score,
-    blurb: (v: number) =>
-      v >= 185
-        ? "Excellent — high cadence, great efficiency"
-        : v >= METRIC_TARGETS.cadence.target
-        ? "Good — within the target range"
-        : v >= 155
-        ? "Below ideal — aim for 170–185 SPM"
-        : "Well below target — aim for 170+ SPM",
+    ...METRIC_TARGETS.cadence,
+    label: "CADENCE", // overrides METRIC_TARGETS' own title-case label — must come AFTER the spread
+    flagMetrics: ["cadence", "stride_and_cadence"],
+    tooltip: "Measured by detecting stride cycles in your video. Accurate to ±2–3% under good filming conditions.",
+    format: (v: number) => String(Math.round(v)),
   },
   {
+    ...METRIC_TARGETS.bounce,
     label: "BOUNCE",
-    key: METRIC_TARGETS.bounce.key,
-    unit: METRIC_TARGETS.bounce.unit,
-    tooltip:
-      "Estimated from vertical movement of torso landmarks. Compare this session-to-session rather than against your watch — wrist accelerometers and video use different measurement methods.",
-    disclaimer: "Best compared session-to-session, not against wearables",
-    good: METRIC_TARGETS.bounce.good,
-    score: METRIC_TARGETS.bounce.score,
-    blurb: (v: number) =>
-      v <= 6
-        ? "Excellent — minimal energy wasted"
-        : v <= METRIC_TARGETS.bounce.target
-        ? "Good — efficient, low bounce"
-        : v <= 12
-        ? "Slightly high — aim for under 10 cm"
-        : "High bounce — too much up-and-down movement",
+    flagMetrics: ["vertical_oscillation"],
+    tooltip: "Estimated from vertical movement of torso landmarks. Best compared session-to-session, not against wearables.",
+    format: (v: number) => String(Math.round(v)),
   },
   {
+    ...METRIC_TARGETS.kneeDrive,
     label: "KNEE DRIVE",
-    key: METRIC_TARGETS.kneeDrive.key,
-    unit: METRIC_TARGETS.kneeDrive.unit,
-    tooltip:
-      "Joint angles from a single camera view are reliable within ~10% vs. lab-grade motion capture under optimal conditions. Accuracy drops with non-ideal camera angles.",
-    disclaimer: "±~10% vs. lab-grade motion capture",
-    good: METRIC_TARGETS.kneeDrive.good,
-    score: METRIC_TARGETS.kneeDrive.score,
-    blurb: (v: number) =>
-      v >= 20
-        ? "Excellent — strong knee drive at strike"
-        : v >= METRIC_TARGETS.kneeDrive.target
-        ? "Good — solid knee drive at foot strike"
-        : v >= 10
-        ? "Below ideal — aim for 15°+"
-        : "Low knee drive — leg landing too straight",
+    flagMetrics: ["knee_flexion_at_strike"],
+    tooltip: "Joint angles from a single camera view are reliable within ~10% vs. lab-grade motion capture under optimal conditions.",
+    format: (v: number) => String(Math.round(v)),
   },
-];
+  {
+    ...METRIC_TARGETS.footStrike,
+    label: "FOOT STRIKE",
+    flagMetrics: ["overstriding", "stride_and_cadence"],
+    tooltip: "How far ahead of your hip your foot lands at contact — landing closer to under your hip reduces braking force.",
+    format: (v: number) => v.toFixed(1),
+  },
+] as const;
 
-function ArcRing({
-  score,
-  isGood,
-  value,
-  unit,
-}: {
-  score: number;
-  isGood: boolean;
-  value: string;
-  unit: string;
-}) {
-  const r = 36;
-  const cx = 50;
-  const cy = 50;
-  const { circumference, arcLength, fillLength } = computeArcGeometry(r, score);
-  const color = isGood ? RING_GOOD_COLOR : RING_WARN_COLOR;
-
-  return (
-    <div className="relative w-28 h-28 flex items-center justify-center">
-      <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full -rotate-[135deg]">
-        {/* Background track */}
-        <circle
-          cx={cx}
-          cy={cy}
-          r={r}
-          fill="none"
-          stroke="#2a2a2a"
-          strokeWidth="8"
-          strokeDasharray={`${arcLength} ${circumference - arcLength}`}
-          strokeLinecap="round"
-        />
-        {/* Filled arc */}
-        <circle
-          cx={cx}
-          cy={cy}
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth="8"
-          strokeDasharray={`${fillLength} ${circumference - fillLength}`}
-          strokeLinecap="round"
-        />
-      </svg>
-      <div className="relative text-center leading-tight">
-        <span className="text-2xl font-bold text-white">{value}</span>
-        <span className="block text-xs text-gray-400 mt-0.5">{unit}</span>
-      </div>
-    </div>
-  );
-}
-
-export default function MetricCards({ summary }: MetricCardsProps) {
+export default function MetricCards({ summary, flags }: MetricCardsProps) {
   if (!summary) return null;
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      {CONFIG.map(({ label, key, unit, tooltip, disclaimer, good, score, blurb }) => {
+    <div className="grid grid-cols-2 gap-3 sm:gap-4">
+      {TILE_CONFIG.map(({ label, key, unit, target, tooltip, flagMetrics, format }) => {
         const raw = summary[key];
         const numVal = raw != null ? Number(raw) : null;
-        const isGood = numVal != null ? good(numVal) : false;
-        const scoreVal = numVal != null ? score(numVal) : 0;
-        const display = numVal != null ? String(raw) : "—";
-        const blurbText = numVal != null ? blurb(numVal) : null;
+        const status = numVal != null ? statusForMetric(flags, [...flagMetrics]) : "good";
+        const display = numVal != null ? format(numVal) : "—";
 
         return (
           <div
             key={key}
-            className="bg-secondary border border-white/10 rounded-xl p-5 flex flex-col items-center gap-3"
+            className={`bg-secondary border rounded-xl p-4 ${
+              status === "focus" ? "border-red-400/40 ring-1 ring-inset ring-red-400/20" : "border-white/10"
+            }`}
           >
-            <div className="flex items-center">
-              <p className="text-xs font-semibold tracking-widest text-primary uppercase">
-                {label}
-              </p>
-              <MetricTooltip content={tooltip} />
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center">
+                <span className="font-mono text-[11px] tracking-[0.12em] text-gray-400 uppercase">
+                  {label}
+                </span>
+                <MetricTooltip content={tooltip} />
+              </div>
+              {numVal != null && (
+                <span className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${STATUS_BADGE_CLASSES[status]}`}>
+                  {STATUS_LABEL[status]}
+                </span>
+              )}
             </div>
-            <ArcRing score={scoreVal} isGood={isGood} value={display} unit={unit} />
-            {blurbText && (
-              <p className="text-xs text-gray-400 text-center leading-snug">{blurbText}</p>
-            )}
-            {disclaimer && numVal != null && (
-              <p className="text-[10px] text-gray-600 text-center leading-snug">{disclaimer}</p>
-            )}
+            <div className="flex items-baseline gap-1">
+              <span className="text-[28px] font-semibold text-white leading-none">{display}</span>
+              <span className="text-sm text-gray-400">{unit}</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-1.5">Target {targetLabel(key, target, unit)}</p>
           </div>
         );
       })}
     </div>
   );
+}
+
+/** "≥170 SPM" / "≤10 cm" — direction inferred from which comparison the
+ * metric's own `good()` predicate uses, so the label can't drift out of
+ * sync with the actual rule. */
+function targetLabel(key: string, target: number, unit: string): string {
+  const cfg = Object.values(METRIC_TARGETS).find((t) => t.key === key);
+  if (!cfg) return `${target} ${unit}`;
+  const isMin = cfg.good(target + 1) && !cfg.good(target - 1);
+  return `${isMin ? "≥" : "≤"}${target} ${unit}`;
 }
