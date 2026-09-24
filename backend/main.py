@@ -217,7 +217,8 @@ def _run_storage_keys(db: Session, run: Run) -> list[str]:
     Deletion paths must use this, not a hand-written key list, or an object
     survives in storage while we tell the user it's gone."""
     keys = [run.raw_video_r2_key, run.annotated_video_r2_key, run.dashboard_image_r2_key]
-    keys += [v.r2_key for v in db.query(RunVideo).filter(RunVideo.run_id == run.id).all()]
+    for v in db.query(RunVideo).filter(RunVideo.run_id == run.id).all():
+        keys += [v.r2_key, v.annotated_r2_key]
     return list(dict.fromkeys(k for k in keys if k))
 
 
@@ -509,6 +510,8 @@ def get_run_status(
     request: Request,
     run_id: uuid.UUID,
     db: Session = Depends(get_db),
+    auth_user_id: str | None = Depends(get_optional_user),
+    x_anon_id: str | None = Header(default=None, alias="X-Anon-Id"),
 ):
     run = _get_run(db, run_id)
     if not run:
@@ -517,12 +520,16 @@ def get_run_status(
     if (run.preprocessing_meta or {}).get("was_trimmed"):
         preprocessing_warning = "Video trimmed to 3 minutes"
     rear = _get_rear_video(db, run_id)
+    # Tolerant resolution: this endpoint stays public/callable with no auth at
+    # all (anyone polling a shared link) — see anon.resolve_user_id_optional.
+    viewer_id = anon.resolve_user_id_optional(auth_user_id, x_anon_id)
     return RunStatusResponse(
         status=run.status.value,
         progress=run.progress_pct or 0,
         preprocessing_warning=preprocessing_warning,
         # None = no rear video on this run; independent of `status` above.
         rear_status=rear.status if rear else None,
+        is_owner=viewer_id is not None and viewer_id == run.user_id,
     )
 
 
@@ -539,6 +546,7 @@ def get_run(
     run = _get_run(db, run_id)
     if not run:
         raise HTTPException(404, "Run not found")
+    rear = _get_rear_video(db, run.id)
     detail = RunDetail(
         run_id=run.id,
         created_at=run.created_at,
@@ -549,7 +557,7 @@ def get_run(
         # time so the two independent pipelines never write the same JSONB column.
         results=results_schema.attach_rear_view(
             run.results_json,
-            results_schema.rear_view_from_video_row(_get_rear_video(db, run.id)),
+            results_schema.rear_view_from_video_row(rear),
         ),
         error_message=run.error_message,
     )
@@ -558,6 +566,8 @@ def get_run(
             detail.annotated_video_url = _cached_presigned_url(run.annotated_video_r2_key)
         if run.dashboard_image_r2_key:
             detail.dashboard_image_url = _cached_presigned_url(run.dashboard_image_r2_key)
+    if rear and rear.status == "complete" and rear.annotated_r2_key:
+        detail.rear_video_url = _cached_presigned_url(rear.annotated_r2_key)
     if run.user_id:
         posthog_capture(run.user_id, "run_viewed", {"run_status": run.status.value})
     return detail

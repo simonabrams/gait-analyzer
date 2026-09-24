@@ -126,8 +126,31 @@ def _draw_metrics_panel(img, lines, font_scale=0.55, thickness=1, padding=8, alp
         y0 += line_spacing
 
 
-def annotate_single_frame(frame, frame_idx, pose_by_idx, results, frame_flags=None, suppress_metrics_panel=False):
+def draw_skeleton(img, landmarks, highlighted_joints=None):
+    """Draw the BlazePose skeleton (connections + joint dots) onto `img` in
+    place. View-independent — the 33-point layout and POSE_CONNECTIONS are the
+    same whether the source video is side-on or rear-view. Joints in
+    `highlighted_joints` (a set of landmark indices, e.g. from
+    get_flagged_joint_set) are drawn larger and red; everything else green.
+    Shared by annotate_single_frame (side) and annotate_rear_frame (rear) so
+    the two views render pixel-identical skeletons.
+    """
     import cv2
+    if highlighted_joints is None:
+        highlighted_joints = set()
+    h, w = img.shape[:2]
+    pts = [(int(lm_item["x"] * w), int(lm_item["y"] * h)) for lm_item in landmarks]
+    for (a, b) in POSE_CONNECTIONS:
+        if a < len(pts) and b < len(pts) and pts[a] and pts[b]:
+            cv2.line(img, pts[a], pts[b], (0, 255, 0), 2, cv2.LINE_AA)
+    for j, pt in enumerate(pts):
+        if j in highlighted_joints:
+            cv2.circle(img, pt, 6, (0, 0, 255), -1, cv2.LINE_AA)
+        else:
+            cv2.circle(img, pt, 4, (0, 255, 0), -1, cv2.LINE_AA)
+
+
+def annotate_single_frame(frame, frame_idx, pose_by_idx, results, frame_flags=None, suppress_metrics_panel=False):
     if frame is None:
         return None
     strides = results.get("strides", [])
@@ -136,21 +159,11 @@ def annotate_single_frame(frame, frame_idx, pose_by_idx, results, frame_flags=No
     if frame_flags is None:
         frame_flags = build_frame_to_stride_flags(strides, flags)
     img = frame.copy()
-    h, w = img.shape[:2]
     pose = pose_by_idx.get(frame_idx)
     flagged_joints = get_flagged_joint_set(frame_flags.get(frame_idx, set()))
 
     if pose and pose.get("landmarks"):
-        lm = pose["landmarks"]
-        pts = [(int(lm_item["x"] * w), int(lm_item["y"] * h)) for lm_item in lm]
-        for (a, b) in POSE_CONNECTIONS:
-            if a < len(pts) and b < len(pts) and pts[a] and pts[b]:
-                cv2.line(img, pts[a], pts[b], (0, 255, 0), 2, cv2.LINE_AA)
-        for j, pt in enumerate(pts):
-            if j in flagged_joints:
-                cv2.circle(img, pt, 6, (0, 0, 255), -1, cv2.LINE_AA)
-            else:
-                cv2.circle(img, pt, 4, (0, 255, 0), -1, cv2.LINE_AA)
+        draw_skeleton(img, pose["landmarks"], flagged_joints)
 
     # A confidence-gate hard fail (see backend/confidence_gate.py) means these
     # numbers aren't trustworthy -- burning them into the video pixels would
@@ -178,6 +191,26 @@ def annotate_single_frame(frame, frame_idx, pose_by_idx, results, frame_flags=No
         ("Trunk lean", f"{_fmt(lean)} deg"),
     ]
     _draw_metrics_panel(img, lines)
+    return img
+
+
+def annotate_rear_frame(frame, frame_idx, pose_by_idx):
+    """Rear-view annotation: skeleton only, deliberately no numeric panel.
+
+    Rear metrics (backend/rear_metrics.py) are already framed as pattern/trend
+    indicators with real error margins (backend/rear_confidence.py) rather than
+    precise readings — burning exact-looking numbers onto the video would
+    misrepresent them the same way annotate_single_frame's own
+    suppress_metrics_panel path avoids doing for a side confidence-gate hard
+    fail. No joint highlighting either: rear has no equivalent of the side
+    view's per-stride heuristic flags to highlight against.
+    """
+    if frame is None:
+        return None
+    img = frame.copy()
+    pose = pose_by_idx.get(frame_idx)
+    if pose and pose.get("landmarks"):
+        draw_skeleton(img, pose["landmarks"])
     return img
 
 

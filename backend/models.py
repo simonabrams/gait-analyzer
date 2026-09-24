@@ -69,6 +69,10 @@ class RunVideo(Base):
     # values are VideoViewType.
     view_type = Column(String(16), nullable=False)
     r2_key = Column(String(512), nullable=False)
+    # Skeleton-overlay annotated video, set once the rear pipeline finishes producing
+    # it (see backend/rear_worker.py). NULL for side rows — side keeps using
+    # Run.annotated_video_r2_key, unchanged — and for rear rows until processing completes.
+    annotated_r2_key = Column(String(512), nullable=True)
     # Rear rows: "processing" | "complete" | "failed" (RunStatus values). NULL for side rows.
     status = Column(String(20), nullable=True)
     error_message = Column(Text, nullable=True)

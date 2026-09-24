@@ -56,3 +56,23 @@ def test_resolve_user_id_raises_on_malformed_anon_id_even_without_auth():
     with pytest.raises(HTTPException) as exc_info:
         anon.resolve_user_id(None, "not-a-valid-anon-id")
     assert exc_info.value.status_code == 400
+
+
+# ---- resolve_user_id_optional: for endpoints that must stay public ----------------
+def test_resolve_user_id_optional_prefers_auth_over_anon():
+    assert anon.resolve_user_id_optional("user_real", VALID) == "user_real"
+
+
+def test_resolve_user_id_optional_falls_back_to_anon():
+    assert anon.resolve_user_id_optional(None, VALID) == VALID
+
+
+def test_resolve_user_id_optional_returns_none_when_both_absent_and_does_not_raise():
+    assert anon.resolve_user_id_optional(None, None) is None
+
+
+def test_resolve_user_id_optional_returns_none_for_malformed_anon_id_and_does_not_raise():
+    """Unlike resolve_user_id: a bad X-Anon-Id on a public endpoint shouldn't
+    401/400 a stranger just viewing a shared link — it just means no ownership
+    match, same as sending nothing at all."""
+    assert anon.resolve_user_id_optional(None, "not-a-valid-anon-id") is None

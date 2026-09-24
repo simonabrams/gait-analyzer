@@ -24,7 +24,7 @@ from backend.analytics import capture as posthog_capture
 from backend.database import get_db_session
 from backend.models import Run, RunVideo, VideoViewType
 from backend.rear_job_runner import run_rear_analysis
-from backend.storage import download_file
+from backend.storage import download_file, rear_annotated_video_key, upload_file
 from backend.video_preprocessor import preprocess_video
 from backend.worker import app
 
@@ -116,13 +116,14 @@ def process_rear_video(self, run_id: str, rear_video_r2_key: str) -> None:
             preprocessed_path, max_frames=max_frames, max_width=max_width, target_fps=target_fps
         )
         rear_view = out["rear_view"]
-        if out["truncated"]:
-            rear_view["meta"]["truncated_frames"] = max_frames
-            rear_view["meta"]["frames_used"] = out["frames_used"]
+
+        ann_key = rear_annotated_video_key(run_id)
+        upload_file(out["annotated_video_path"], ann_key)
 
         # "complete" is pipeline state (the task ran); whether the analysis was
         # usable lives in rear_view["status"] (ok / low_confidence / insufficient_data).
         row.results_json = rear_view
+        row.annotated_r2_key = ann_key
         row.status = "complete"
         row.error_message = None
         db.commit()
@@ -130,6 +131,12 @@ def process_rear_video(self, run_id: str, rear_video_r2_key: str) -> None:
             "rear_status": rear_view["status"],
             "reason": (rear_view.get("confidence_gate") or {}).get("reason"),
         })
+
+        for p in out.get("temp_paths") or []:
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
     except celery.exceptions.SoftTimeLimitExceeded:
         mark_rear_failed(db, row, "Rear-view analysis timed out (video may be too long or complex).")
         _capture(db, run_id, "rear_run_failed", {"error_type": "timeout"})

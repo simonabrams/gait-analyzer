@@ -122,5 +122,9 @@ def annotated_video_key(run_id: str) -> str:
     return f"processed/{run_id}/annotated.mp4"
 
 
+def rear_annotated_video_key(run_id: str) -> str:
+    return f"processed/{run_id}/rear_annotated.mp4"
+
+
 def dashboard_image_key(run_id: str) -> str:
     return f"processed/{run_id}/dashboard.png"

@@ -132,6 +132,33 @@ def test_status_endpoint_reports_rear_status_independently(env):
     assert body["status"] == "complete" and body["rear_status"] == "processing"
 
 
+# ---- GET /api/runs/{id}/status: is_owner ----------------------------------------------------
+def test_status_is_owner_true_for_the_owner(env):
+    run_id = env.make_run(user=OWNER)
+    body = env.client.get(f"/api/runs/{run_id}/status", headers={"X-Anon-Id": OWNER}).json()
+    assert body["is_owner"] is True
+
+
+def test_status_is_owner_false_for_a_stranger(env):
+    run_id = env.make_run(user=OWNER)
+    body = env.client.get(f"/api/runs/{run_id}/status", headers={"X-Anon-Id": STRANGER}).json()
+    assert body["is_owner"] is False
+
+
+def test_status_is_owner_false_and_still_200_with_no_credentials_at_all(env):
+    """The status endpoint stays fully public — a stranger polling a shared
+    link with no X-Anon-Id/Authorization at all must not be rejected."""
+    run_id = env.make_run(user=OWNER)
+    r = env.client.get(f"/api/runs/{run_id}/status")
+    assert r.status_code == 200 and r.json()["is_owner"] is False
+
+
+def test_status_is_owner_false_for_a_malformed_anon_id_not_a_400(env):
+    run_id = env.make_run(user=OWNER)
+    r = env.client.get(f"/api/runs/{run_id}/status", headers={"X-Anon-Id": "not-a-valid-anon-id"})
+    assert r.status_code == 200 and r.json()["is_owner"] is False
+
+
 def test_someone_elses_run_is_404_and_nothing_is_stored(env):
     run_id = env.make_run(user=OWNER)
     assert env.post_rear(run_id, user=STRANGER).status_code == 404
@@ -222,9 +249,12 @@ def test_create_run_registers_the_side_video_in_run_videos(env):
 
 
 # ---- GET /api/runs/{id}: read-time merge ---------------------------------------------------------
-def _attach_rear(env, run_id, status, results=None):
+def _attach_rear(env, run_id, status, results=None, annotated_r2_key=None):
     with env.Session() as db:
-        db.add(RunVideo(run_id=run_id, view_type="rear", r2_key=f"raw/{run_id}/rear.mp4", status=status, results_json=results))
+        db.add(RunVideo(
+            run_id=run_id, view_type="rear", r2_key=f"raw/{run_id}/rear.mp4",
+            status=status, results_json=results, annotated_r2_key=annotated_r2_key,
+        ))
         db.commit()
 
 
@@ -261,6 +291,30 @@ def test_rear_result_does_not_appear_while_the_side_run_has_no_results(env):
     assert env.client.get(f"/api/runs/{run_id}").json()["results"] is None
 
 
+# ---- GET /api/runs/{id}: rear_video_url ------------------------------------------------------
+def test_rear_video_url_present_once_rear_row_is_complete_with_an_annotated_key(env):
+    run_id = env.make_run(results=SIDE_RESULTS)
+    _attach_rear(env, run_id, "complete", REAR_VIEW, annotated_r2_key=f"processed/{run_id}/rear_annotated.mp4")
+    body = env.client.get(f"/api/runs/{run_id}").json()
+    assert body["rear_video_url"]
+
+
+@pytest.mark.parametrize("row_status, annotated_key", [
+    ("processing", None),          # still processing: nothing to link to yet
+    ("failed", None),              # failed: no video was ever produced
+    ("complete", None),            # shouldn't happen in practice, but tolerate it
+])
+def test_rear_video_url_absent_without_a_complete_annotated_video(env, row_status, annotated_key):
+    run_id = env.make_run(results=SIDE_RESULTS)
+    _attach_rear(env, run_id, row_status, REAR_VIEW if row_status == "complete" else None, annotated_r2_key=annotated_key)
+    assert env.client.get(f"/api/runs/{run_id}").json()["rear_video_url"] is None
+
+
+def test_rear_video_url_absent_with_no_rear_video_at_all(env):
+    run_id = env.make_run(results=SIDE_RESULTS)
+    assert env.client.get(f"/api/runs/{run_id}").json()["rear_video_url"] is None
+
+
 # ---- DELETE: storage-first, including the rear video ------------------------------------------------
 def test_delete_removes_the_rear_video_from_storage_and_the_row(env):
     run_id = env.make_run()
@@ -273,6 +327,17 @@ def test_delete_removes_the_rear_video_from_storage_and_the_row(env):
     assert len(env.deleted) == 3  # the side raw key (on runs AND run_videos) is deleted once
     with env.Session() as db:
         assert db.query(Run).count() == 0 and db.query(RunVideo).count() == 0
+
+
+def test_delete_removes_the_rear_annotated_video_key_too(env):
+    run_id = env.make_run()
+    _attach_rear(env, run_id, "complete", REAR_VIEW, annotated_r2_key=f"processed/{run_id}/rear_annotated.mp4")
+    r = env.client.delete(f"/api/runs/{run_id}", headers={"X-Anon-Id": OWNER})
+    assert r.status_code == 204
+    assert set(env.deleted) == {
+        f"raw/{run_id}/input.mp4", f"processed/{run_id}/annotated.mp4",
+        f"raw/{run_id}/rear.mp4", f"processed/{run_id}/rear_annotated.mp4",
+    }
 
 
 def test_failed_rear_storage_delete_keeps_the_run_and_rows_so_it_can_be_retried(env, monkeypatch):
