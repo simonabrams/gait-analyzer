@@ -18,8 +18,17 @@ if config.config_file_name is not None:
             "DATABASE_URL",
             "postgresql://postgres:postgres@localhost:5432/gait_analyzer",
         )
+        # Explicit +psycopg2 driver — see backend/database.py's matching
+        # comment: SQLAlchemy 2.1 changed the default DBAPI for a bare
+        # postgresql:// URL from psycopg2 to psycopg (v3), which isn't
+        # installed (requirements.txt only has psycopg2-binary). This one
+        # matters even more than database.py's: `alembic upgrade head` runs
+        # in the Docker image's CMD before uvicorn even starts, so this
+        # breaking fails the whole container, not just request handling.
         if url.startswith("postgres://"):
-            url = url.replace("postgres://", "postgresql://", 1)
+            url = url.replace("postgres://", "postgresql+psycopg2://", 1)
+        elif url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
         config.set_main_option("sqlalchemy.url", url)
 
 target_metadata = Base.metadata
