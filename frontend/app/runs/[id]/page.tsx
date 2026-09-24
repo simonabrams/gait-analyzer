@@ -3,10 +3,11 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getRun } from "@/lib/api";
 import MetricCards from "@/components/MetricCards";
-import FeedbackCards from "@/components/FeedbackCards";
+import SummaryStrip from "@/components/SummaryStrip";
+import WhatToWorkOn from "@/components/WhatToWorkOn";
+import StrideCharts from "@/components/StrideCharts";
 import ShareButton from "@/components/ShareButton";
-import PdfReportButton from "@/components/PdfReportButton";
-import AccuracyBanner from "@/components/AccuracyBanner";
+import ExportMenu from "@/components/ExportMenu";
 import ClaimBanner from "@/components/ClaimBanner";
 import DeleteScanButton from "@/components/DeleteScanButton";
 import AddRearVideoControl from "@/components/AddRearVideoControl";
@@ -167,13 +168,7 @@ export default async function RunResultPage({ params, searchParams }: Props) {
         </div>
         <div className="flex items-center gap-2 pt-1">
           <ShareButton runId={id} />
-          {hasData && <PdfReportButton runId={id} />}
-          <Link
-            href="/runs"
-            className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors"
-          >
-            Run history
-          </Link>
+          <ExportMenu runId={id} />
           <DeleteScanButton runId={id} />
         </div>
       </div>
@@ -202,7 +197,8 @@ export default async function RunResultPage({ params, searchParams }: Props) {
                 : "Lower confidence than usual — fewer strides detected than ideal."}
             </div>
           )}
-          <AccuracyBanner />
+
+          <SummaryStrip summary={summary} flags={flags} rearView={run.results?.rear_view} />
 
           {/* Key metrics */}
           <div className="space-y-4">
@@ -210,34 +206,42 @@ export default async function RunResultPage({ params, searchParams }: Props) {
               <SectionEyebrow label="Key Metrics" />
               <h2 className="text-xl font-semibold text-white mt-1">Performance Overview</h2>
             </div>
-            <MetricCards summary={summary} />
+            <MetricCards summary={summary} flags={flags} />
           </div>
 
-          {/* Form breakdown / feedback */}
+          <p className="text-xs text-gray-500 leading-relaxed">
+            Video-derived estimates — best for comparing your own sessions over time, not for
+            clinical use.{" "}
+            <Link href="/about" className="text-primary hover:underline">
+              How we measure
+            </Link>
+          </p>
+
+          {/* What to work on — side-view findings only (see WhatToWorkOn.tsx
+              for why rear patterns don't get an equivalent card here). */}
           <div className="space-y-4">
             <div>
               <SectionEyebrow label="AI Analysis" />
-              <h2 className="text-xl font-semibold text-white mt-1">Form Breakdown</h2>
+              <h2 className="text-xl font-semibold text-white mt-1">What to Work On</h2>
             </div>
-            <FeedbackCards flags={flags} hasData={true} />
+            <WhatToWorkOn flags={flags} strides={run.results?.strides as Array<Record<string, unknown>> | undefined} />
           </div>
 
           {/* Dashboard image */}
           {run.dashboard_image_url && (
-            <div className="space-y-4">
-              <div>
-                <SectionEyebrow label="Stride Charts" />
-                <h2 className="text-xl font-semibold text-white mt-1">Metrics Over Time</h2>
-              </div>
-              <div className="bg-secondary border border-white/10 rounded-xl overflow-hidden">
-                <img
-                  src={run.dashboard_image_url}
-                  alt="Run dashboard"
-                  className="w-full h-auto"
-                />
-              </div>
+            <div className="bg-secondary border border-white/10 rounded-xl overflow-hidden">
+              <img src={run.dashboard_image_url} alt="Run dashboard" className="w-full h-auto" />
             </div>
           )}
+
+          {/* Stride by stride — supporting detail, side-view only this pass. */}
+          <div className="space-y-4">
+            <div>
+              <SectionEyebrow label="Supporting Detail" />
+              <h2 className="text-xl font-semibold text-white mt-1">Stride by Stride</h2>
+            </div>
+            <StrideCharts strides={run.results?.strides as Array<Record<string, unknown>> | undefined} />
+          </div>
         </>
       ) : (
         /* No data — explain why and what to try */

@@ -1,24 +1,13 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import posthog from "posthog-js";
 
+/** The single primary action on the results page. "Copy link" moved into
+ * ExportMenu alongside "Download PDF report" — this button now does one
+ * thing only. */
 export default function ShareButton({ runId }: { runId: string }) {
-  const [copied, setCopied] = useState(false);
   const [working, setWorking] = useState(false);
-
-  const copyLink = useCallback(() => {
-    if (typeof window === "undefined") return;
-    const url = window.location.href;
-    navigator.clipboard.writeText(url).then(
-      () => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-        posthog.capture("share_link_copied");
-      },
-      () => setCopied(false)
-    );
-  }, []);
 
   const shareImage = useCallback(async () => {
     setWorking(true);
@@ -53,22 +42,13 @@ export default function ShareButton({ runId }: { runId: string }) {
   }, [runId]);
 
   return (
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        onClick={shareImage}
-        disabled={working}
-        className="px-4 py-2 bg-primary text-background rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
-      >
-        {working ? "Preparing…" : "Share / Download image"}
-      </button>
-      <button
-        type="button"
-        onClick={copyLink}
-        className="px-4 py-2 bg-secondary border border-white/20 hover:bg-white/10 rounded-lg text-sm font-medium text-gray-100 hover:text-white transition-colors"
-      >
-        {copied ? "Link copied!" : "Copy link"}
-      </button>
-    </div>
+    <button
+      type="button"
+      onClick={shareImage}
+      disabled={working}
+      className="px-4 py-2 bg-primary text-background rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
+    >
+      {working ? "Preparing…" : "Share image"}
+    </button>
   );
 }

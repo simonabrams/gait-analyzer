@@ -1,11 +1,13 @@
 // Gait metric targets — single source of truth for the thresholds used to
 // score/color metrics across MetricCards, share cards, and progress charts.
 // Mirrors backend/heuristics.py's CADENCE_MIN_SPM / VERTICAL_OSC_MAX_CM /
-// KNEE_FLEXION_MIN_DEG constants; keep both in sync if targets change.
+// KNEE_FLEXION_MIN_DEG / OVERSTRIDE_CM_THRESHOLD constants; keep both in
+// sync if targets change.
 
 export const CADENCE_TARGET_SPM = 170;
 export const VERTICAL_OSC_TARGET_CM = 10;
 export const KNEE_DRIVE_TARGET_DEG = 15;
+export const FOOT_STRIKE_TARGET_CM = 10;
 
 export const METRIC_TARGETS = {
   cadence: {
@@ -32,5 +34,14 @@ export const METRIC_TARGETS = {
     target: KNEE_DRIVE_TARGET_DEG,
     good: (v: number) => v >= KNEE_DRIVE_TARGET_DEG,
     score: (v: number) => Math.min(Math.round((v / KNEE_DRIVE_TARGET_DEG) * 100), 100),
+  },
+  footStrike: {
+    key: "foot_strike_position_avg_cm",
+    label: "Foot Strike",
+    unit: "cm",
+    target: FOOT_STRIKE_TARGET_CM,
+    good: (v: number) => v <= FOOT_STRIKE_TARGET_CM,
+    score: (v: number) =>
+      v <= 0 ? 100 : Math.min(Math.round((FOOT_STRIKE_TARGET_CM / v) * 100), 100),
   },
 } as const;

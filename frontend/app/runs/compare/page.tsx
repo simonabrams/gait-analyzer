@@ -28,7 +28,7 @@ function RunColumn({ run }: { run: RunDetail }) {
       <div>
         <p className="text-sm text-gray-400">{formatDate(run.created_at)}</p>
       </div>
-      <MetricCards summary={run.results?.summary} />
+      <MetricCards summary={run.results?.summary} flags={run.results?.flags} />
       {run.dashboard_image_url && (
         <div className="bg-secondary border border-white/10 rounded-xl overflow-hidden">
           <img src={run.dashboard_image_url} alt="Run dashboard" className="w-full h-auto" />

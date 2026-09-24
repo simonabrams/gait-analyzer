@@ -61,6 +61,14 @@ function formatPattern(pattern: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+/** Explicit +/- on every value (not just an implied minus) — direction is
+ * real, meaningful data here (pronation vs. supination, valgus vs. varus,
+ * drop vs. hike — see backend/rear_confidence.py's pattern_for()), never
+ * collapsed to an unsigned magnitude. */
+function formatSignedDeg(value: number): string {
+  return `${value > 0 ? "+" : ""}${value}°`;
+}
+
 function MetricRow({ label, metric }: { label: string; metric: RearMetric }) {
   return (
     <div className="flex items-start justify-between gap-3 py-2.5 border-b border-white/5 last:border-b-0">
@@ -71,7 +79,7 @@ function MetricRow({ label, metric }: { label: string; metric: RearMetric }) {
       {metric.available ? (
         <div className="text-right">
           <div className="flex items-center gap-2 justify-end">
-            <span className="text-white font-semibold text-sm">{metric.value_deg}°</span>
+            <span className="text-white font-mono font-semibold text-sm">{formatSignedDeg(metric.value_deg)}</span>
             <TierBadge tier={metric.confidence.tier} />
           </div>
           <p className="text-xs text-gray-400 mt-0.5">{formatPattern(metric.pattern)}</p>
@@ -86,7 +94,7 @@ function MetricRow({ label, metric }: { label: string; metric: RearMetric }) {
 function LegCard({ title, leg }: { title: string; leg: RearLeg }) {
   return (
     <div className="bg-secondary border border-white/10 rounded-xl p-5">
-      <p className="text-xs font-semibold tracking-widest text-primary uppercase mb-1">{title}</p>
+      <p className="font-mono text-[11px] tracking-[0.12em] text-primary uppercase mb-1">{title}</p>
       <MetricRow label="Hip Drop" metric={leg.hip_drop} />
       <MetricRow label="Pronation" metric={leg.pronation} />
       <MetricRow label="Knee Valgus" metric={leg.knee_valgus} />
@@ -108,15 +116,15 @@ function SymmetryCard({ symmetry }: { symmetry: RearSymmetry }) {
     <div className="bg-secondary border border-white/10 rounded-xl p-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center">
-          <p className="text-xs font-semibold tracking-widest text-primary uppercase">
-            Left/Right Symmetry
+          <p className="font-mono text-[11px] tracking-[0.12em] text-primary uppercase">
+            L/R Symmetry
           </p>
           <MetricTooltip content={symmetry.disclaimer} />
         </div>
         <TierBadge tier={symmetry.confidence.tier} />
       </div>
       <div className="flex items-baseline gap-2 mt-2">
-        <span className="text-2xl font-bold text-white">{symmetry.score}</span>
+        <span className="text-[28px] font-mono font-semibold text-white leading-none">{symmetry.score}</span>
         <span className="text-gray-400 text-sm">/ 100</span>
       </div>
       <p className="text-sm text-gray-300 mt-0.5">{formatPattern(symmetry.band)}</p>
