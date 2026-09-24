@@ -18,9 +18,23 @@ import {
   type HeightUnit,
 } from "@/lib/height";
 import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_SIZE_BYTES } from "@/lib/videoValidation";
+import { useRearVideoUpload } from "@/lib/useRearVideoUpload";
 import ConsentModal from "@/components/ConsentModal";
 import UpgradeModal from "@/components/UpgradeModal";
 import posthog from "posthog-js";
+
+function rearStatusLabel(status: string): string | null {
+  switch (status) {
+    case "uploading":
+      return "Rear video: uploading…";
+    case "processing":
+      return "Rear video: analysing…";
+    case "failed":
+      return "Rear video couldn't be uploaded — you can add it later from your results page.";
+    default:
+      return null;
+  }
+}
 
 function getProcessingStage(pct: number): string {
   if (pct >= 90) return "Writing report…";
@@ -59,6 +73,11 @@ export default function VideoUploader({
         ? null
         : `Height must be between 100–250 cm (about 3'3″–8'2″).`;
   const [file, setFile] = useState<File | null>(null);
+  const [rearFile, setRearFile] = useState<File | null>(null);
+  const [showRearDropzone, setShowRearDropzone] = useState(false);
+  // Set once the side run is created — the rear upload can't start before
+  // this exists (POST /api/runs/{id}/rear-video needs a real run id).
+  const [createdRunId, setCreatedRunId] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [processingProgress, setProcessingProgress] = useState<number | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -113,6 +132,40 @@ export default function VideoUploader({
     multiple: false,
     disabled: isActive,
   });
+
+  const onRearDrop = useCallback((accepted: File[]) => {
+    setRearFile(accepted[0] ?? null);
+  }, []);
+
+  const { getRootProps: getRearRootProps, getInputProps: getRearInputProps, isDragActive: isRearDragActive } = useDropzone({
+    onDrop: onRearDrop,
+    accept: ALLOWED_VIDEO_TYPES,
+    maxSize: MAX_VIDEO_SIZE_BYTES,
+    maxFiles: 1,
+    multiple: false,
+    disabled: isActive,
+  });
+
+  // Independent, non-blocking (see backend/main.py's add_rear_video — separate
+  // Celery queue, never touches the side run). Called unconditionally: the
+  // real run id isn't known until the side upload succeeds, one or more
+  // renders after mount, so it can't be a value passed once at call time —
+  // see useRearVideoUpload's own seeding-effect comment for the same reasoning.
+  const rearUpload = useRearVideoUpload(createdRunId ?? "");
+
+  // Fires once both a run id and a chosen rear file exist. Deliberately not
+  // awaited/blocking anything else here — the side flow's own poll/redirect
+  // (in startUpload below) proceeds regardless of how this turns out; it's
+  // fine to still be "processing" when the user lands on the results page,
+  // which already renders that state (see AddRearVideoControl).
+  useEffect(() => {
+    if (createdRunId && rearFile && rearUpload.status === "idle") {
+      rearUpload.submit(rearFile);
+    }
+    // rearUpload.submit is intentionally omitted: it's recreated each render
+    // closed over the current createdRunId, which is already a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createdRunId, rearFile]);
 
   // Consent gate: the first Analyze click checks the server once; after that the
   // result is cached in state for the session. The backend enforces this too
@@ -192,6 +245,11 @@ export default function VideoUploader({
       // Remember this run as "ours" so the anonymous visitor gets a self-serve
       // delete control on its results page (see lib/anon.ts, DeleteScanButton).
       if (anonId) rememberAnonRun(run_id);
+      // Triggers the rear-upload effect above if a rear file was chosen — a
+      // no-op otherwise. getOrCreateAnonId() above already stored the anon id
+      // this run just used, so if useRearVideoUpload needs it (anonymous
+      // visitor), it's already there to read.
+      setCreatedRunId(run_id);
 
       // Upload done — switch to processing phase
       setUploadProgress(null);
@@ -261,6 +319,52 @@ export default function VideoUploader({
           </>
         )}
       </div>
+
+      {/* Progressive disclosure: zero visual footprint for anyone who doesn't
+          click it. Hidden once the side upload starts — see the status line
+          near the progress UI below for what happens to it after that. */}
+      {!isActive && (
+        showRearDropzone ? (
+          <div>
+            <div
+              {...getRearRootProps()}
+              className={`border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-colors ${
+                isRearDragActive
+                  ? "border-primary bg-primary/10"
+                  : "border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10"
+              }`}
+            >
+              <input {...getRearInputProps()} />
+              {rearFile ? (
+                <p className="text-white text-sm">{rearFile.name}</p>
+              ) : (
+                <p className="text-gray-300 text-xs font-medium">
+                  {isRearDragActive ? "Drop the video here" : "Drag and drop a rear-view clip (optional)"}
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowRearDropzone(false);
+                setRearFile(null);
+              }}
+              className="text-xs text-gray-500 hover:text-gray-300 mt-1.5"
+            >
+              Remove
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowRearDropzone(true)}
+            className="text-xs text-primary hover:underline"
+          >
+            + Add a rear-view video (optional)
+          </button>
+        )
+      )}
+
       <div>
         <div className="flex items-center justify-between mb-1">
           <label className="block text-sm font-medium text-gray-200">Height</label>
@@ -371,6 +475,12 @@ export default function VideoUploader({
         </div>
       )}
       {error && <p className="text-red-400 text-sm">{error}</p>}
+      {/* Non-blocking — never alarms about or delays the side result above.
+          A failure here is fully recoverable from the results page's own
+          retry control (AddRearVideoControl), so this stays a quiet note. */}
+      {isActive && rearFile && rearStatusLabel(rearUpload.status) && (
+        <p className="text-xs text-gray-500">{rearStatusLabel(rearUpload.status)}</p>
+      )}
       <button
         type="button"
         onClick={submit}
