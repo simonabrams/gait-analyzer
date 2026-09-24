@@ -358,9 +358,10 @@ export default function VideoUploader({
           <button
             type="button"
             onClick={() => setShowRearDropzone(true)}
-            className="text-xs text-primary hover:underline"
+            className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-white/25 rounded-lg text-sm font-medium text-gray-300 hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-colors"
           >
-            + Add a rear-view video (optional)
+            <span aria-hidden>+</span> Add a rear-view video
+            <span className="text-gray-500 text-xs font-normal">(optional)</span>
           </button>
         )
       )}

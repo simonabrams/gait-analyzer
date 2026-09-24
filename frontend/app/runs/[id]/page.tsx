@@ -227,12 +227,11 @@ export default async function RunResultPage({ params, searchParams }: Props) {
             <WhatToWorkOn flags={flags} strides={run.results?.strides as Array<Record<string, unknown>> | undefined} />
           </div>
 
-          {/* Dashboard image */}
-          {run.dashboard_image_url && (
-            <div className="bg-secondary border border-white/10 rounded-xl overflow-hidden">
-              <img src={run.dashboard_image_url} alt="Run dashboard" className="w-full h-auto" />
-            </div>
-          )}
+          {/* No more pre-rendered dashboard.png here — StrideCharts below now
+              covers the same four metrics natively. The backend still
+              generates/uploads that PNG for the PDF export (pdf_report.py),
+              which hasn't been moved to native charts yet — see the plan
+              file for that as a separate follow-up. */}
 
           {/* Stride by stride — supporting detail, side-view only this pass. */}
           <div className="space-y-4">
