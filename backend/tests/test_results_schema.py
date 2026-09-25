@@ -75,7 +75,7 @@ def test_pending_and_failed_placeholders_validate(placeholder):
 def test_bad_rear_view_is_rejected():
     for mutate in (
         lambda rv: rv["legs"]["left"]["knee_valgus"].update(pattern="made_up"),
-        lambda rv: rv["legs"]["left"]["hip_drop"].pop("disclaimer"),
+        lambda rv: rv["legs"]["left"]["experimental"]["hip_drop"].pop("disclaimer"),
         lambda rv: rv["meta"].update(synchronized_with_side_view=True),
         lambda rv: rv["curves"]["left"]["hip_drop_deg"].pop(),
         lambda rv: rv["symmetry"].update(score=140),
@@ -126,3 +126,15 @@ def test_failed_rear_view_never_leaks_the_internal_error_text():
     rv = rs.rear_view_from_video_row(row)
     assert rv == {"status": "failed", "error": "rear_analysis_failed"}
     assert "psycopg2" not in json.dumps(rv)
+
+
+def test_rear_results_stored_before_hip_drop_went_experimental_still_validate():
+    """metrics_version 2 rows (already in the DB) carry hip_drop at the top of
+    each leg and include it in symmetry; they must stay valid with no migration."""
+    doc = copy.deepcopy(SAMPLE)
+    rv = doc["rear_view"]
+    rv["meta"]["metrics_version"] = 2
+    for leg in ("left", "right"):
+        rv["legs"][leg]["hip_drop"] = rv["legs"][leg]["experimental"].pop("hip_drop")
+    rv["symmetry"]["components"]["hip_drop"] = 90
+    assert _errors(doc) == []

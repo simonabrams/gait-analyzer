@@ -97,7 +97,7 @@
           "type": "object",
           "required": ["analyzed_at", "fps", "num_frames", "cycle_normalisation", "synchronized_with_side_view", "left_right_consistency", "left_right_labels_swapped"],
           "properties": {
-            "metrics_version": { "description": "Absent means 1 (hip drop at mid-stance, pronation as a main metric). 2: tilt-cancelled peak hip drop, peak knee alignment, step_width, pronation under experimental.", "enum": [1, 2] },
+            "metrics_version": { "description": "Absent means 1 (hip drop at mid-stance, pronation as a main metric). 2: tilt-cancelled peak hip drop, peak knee alignment, step_width, pronation under experimental. 3: hip_drop also under experimental.", "enum": [1, 2, 3] },
             "tilt_offset_deg": { "type": "number", "description": "Median hip-line tilt over the clip (camera roll plus standing pelvic asymmetry). Hip drop already cancels it." },
             "video_file": { "type": "string" },
             "analyzed_at": { "type": "string", "format": "date-time" },
@@ -174,8 +174,8 @@
 
     "leg": {
       "type": "object",
-      "description": "metrics_version 1 legs carry pronation at the top level; version 2 legs carry step_width and move pronation under experimental.",
-      "required": ["cycles_detected", "cycles_usable", "reportable", "hip_drop", "knee_valgus"],
+      "description": "metrics_version 1 legs carry hip_drop and pronation at the top level; version 2 adds step_width and moves pronation under experimental; version 3 moves hip_drop under experimental too.",
+      "required": ["cycles_detected", "cycles_usable", "reportable", "knee_valgus"],
       "properties": {
         "cycles_detected": { "type": "integer", "minimum": 0 },
         "cycles_usable": { "type": "integer", "minimum": 0 },
@@ -189,7 +189,10 @@
         "experimental": {
           "description": "Computed but not shown or scored.",
           "type": "object",
-          "properties": { "pronation": { "$ref": "#/$defs/pronation_metric" } },
+          "properties": {
+            "pronation": { "$ref": "#/$defs/pronation_metric" },
+            "hip_drop": { "$ref": "#/$defs/hip_drop_metric" }
+          },
           "additionalProperties": false
         }
       },

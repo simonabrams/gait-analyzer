@@ -66,9 +66,9 @@
   "rear_view": {
     "status": "ok",
     "meta": {
-      "metrics_version": 2,
+      "metrics_version": 3,
       "video_file": "rear.mp4",
-      "analyzed_at": "2026-09-25T20:58:44.645664+00:00",
+      "analyzed_at": "2026-09-25T23:30:06.478180+00:00",
       "fps": 30.0,
       "num_frames": 330,
       "cycle_normalisation": "percent_gait_cycle",
@@ -99,23 +99,6 @@
         "cycles_usable": 14,
         "stance_pct": 42.9,
         "midstance_pct": 19.0,
-        "hip_drop": {
-          "available": true,
-          "value_deg": 4,
-          "pattern": "typical",
-          "window_pct": [
-            0.0,
-            42.9
-          ],
-          "cycles_used": 14,
-          "ci95_deg": 0.0,
-          "error_margin_deg": null,
-          "confidence": {
-            "score": 0.9,
-            "tier": "moderate"
-          },
-          "disclaimer": "How far your pelvis dips on the swing side between foot strike and the lowest point of stance, from a rear-view video. Measured from your own foot strike, so a slightly tilted camera doesn't count. Best used to spot side-to-side differences and changes between sessions."
-        },
         "knee_valgus": {
           "available": true,
           "value_deg": 5,
@@ -167,6 +150,23 @@
               "tier": "low"
             },
             "disclaimer": "A rough proxy from the angle of your ankle-to-heel line, which is short and hard to track from a phone camera. Treat it as a pattern, not an angle. Best used to spot side-to-side differences and changes between sessions."
+          },
+          "hip_drop": {
+            "available": true,
+            "value_deg": 4,
+            "pattern": "typical",
+            "window_pct": [
+              0.0,
+              42.9
+            ],
+            "cycles_used": 14,
+            "ci95_deg": 0.0,
+            "error_margin_deg": null,
+            "confidence": {
+              "score": 0.9,
+              "tier": "moderate"
+            },
+            "disclaimer": "How far your pelvis dips on the swing side between foot strike and the lowest point of stance, from a rear-view video. Measured from your own foot strike, so a slightly tilted camera doesn't count. Best used to spot side-to-side differences and changes between sessions."
           }
         },
         "reportable": true
@@ -176,23 +176,6 @@
         "cycles_usable": 15,
         "stance_pct": 47.6,
         "midstance_pct": 21.4,
-        "hip_drop": {
-          "available": true,
-          "value_deg": 10,
-          "pattern": "pronounced",
-          "window_pct": [
-            0.0,
-            47.6
-          ],
-          "cycles_used": 15,
-          "ci95_deg": 0.0,
-          "error_margin_deg": null,
-          "confidence": {
-            "score": 0.9,
-            "tier": "moderate"
-          },
-          "disclaimer": "How far your pelvis dips on the swing side between foot strike and the lowest point of stance, from a rear-view video. Measured from your own foot strike, so a slightly tilted camera doesn't count. Best used to spot side-to-side differences and changes between sessions."
-        },
         "knee_valgus": {
           "available": true,
           "value_deg": 15,
@@ -244,6 +227,23 @@
               "tier": "low"
             },
             "disclaimer": "A rough proxy from the angle of your ankle-to-heel line, which is short and hard to track from a phone camera. Treat it as a pattern, not an angle. Best used to spot side-to-side differences and changes between sessions."
+          },
+          "hip_drop": {
+            "available": true,
+            "value_deg": 10,
+            "pattern": "pronounced",
+            "window_pct": [
+              0.0,
+              47.6
+            ],
+            "cycles_used": 15,
+            "ci95_deg": 0.0,
+            "error_margin_deg": null,
+            "confidence": {
+              "score": 0.9,
+              "tier": "moderate"
+            },
+            "disclaimer": "How far your pelvis dips on the swing side between foot strike and the lowest point of stance, from a rear-view video. Measured from your own foot strike, so a slightly tilted camera doesn't count. Best used to spot side-to-side differences and changes between sessions."
           }
         },
         "reportable": true
@@ -251,10 +251,9 @@
     },
     "symmetry": {
       "available": true,
-      "score": 34,
+      "score": 50,
       "band": "notable_asymmetry",
       "components": {
-        "hip_drop": 2,
         "knee_valgus": 0,
         "step_width": 100
       },

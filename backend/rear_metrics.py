@@ -22,6 +22,7 @@ coords with y growing downward, median aggregation after outlier rejection):
 - Positive hip_drop   = the swing-side hip dips below where it was at that
   leg's initial contact (peak during stance). Measuring from the leg's own
   initial contact cancels camera roll and a naturally uneven pelvis.
+  Experimental since metrics_version 3 (see EXPERIMENTAL_METRICS).
 - Positive knee_valgus = knee medial to the hip-ankle line (peak in the first
   60% of stance). Shown to users as "knee alignment".
 - step_width = where the stance foot lands relative to the pelvis midline, as
@@ -98,12 +99,20 @@ _CURVE_MIN_COVERAGE = 0.5
 # Bumped when the rear_view shape or a metric's definition changes; absent = 1.
 # 2: tilt-cancelled peak hip drop, peak knee alignment, step_width added,
 #    pronation moved under legs.<leg>.experimental, landmark smoothing.
-METRICS_VERSION = 2
+# 3: hip_drop moved under legs.<leg>.experimental too (see below).
+METRICS_VERSION = 3
 
 # Reported per leg and combined into the symmetry score.
-METRICS = ("hip_drop", "knee_valgus", "step_width")
-# Computed and stored, but not shown or scored (see module docstring).
-EXPERIMENTAL_METRICS = ("pronation",)
+METRICS = ("knee_valgus", "step_width")
+# Computed and stored, but not shown or scored.
+# - pronation: ankle-to-heel is ~8 px long at pose-model resolution.
+# - hip_drop: on real rear clips (Sep 2026, 30 and 60 fps) the hip-landmark
+#   line tilts the opposite way to a pelvic drop, ~4 deg with the stance-side
+#   hip point LOWER at mid-stance, so it reads 0 for everyone. MediaPipe's hip
+#   points appear to follow the thighs rather than the pelvis (or foot strike
+#   is detected late). Kept, with its curve, until validated against
+#   lower-back markers (improvement plan, Phase 4).
+EXPERIMENTAL_METRICS = ("pronation", "hip_drop")
 # Metrics with a waveform in `curves` (angles only; step width is a stance value).
 CURVE_METRICS = ("hip_drop", "knee_valgus")
 
