@@ -105,7 +105,17 @@
             "synchronized_with_side_view": { "const": false },
             "note": { "type": "string" },
             "left_right_consistency": { "type": "number", "minimum": 0, "maximum": 1 },
-            "left_right_labels_swapped": { "type": "boolean" }
+            "left_right_labels_swapped": { "type": "boolean" },
+            "view_check": {
+              "type": "object",
+              "required": ["view", "shoulder_ratio", "frames_used"],
+              "properties": {
+                "view": { "enum": ["side", "diagonal", "frontal", "unknown"] },
+                "shoulder_ratio": { "type": ["number", "null"] },
+                "frames_used": { "type": "integer", "minimum": 0 }
+              },
+              "additionalProperties": false
+            }
           },
           "additionalProperties": false
         },
@@ -181,7 +191,7 @@
       "required": ["available", "reason"],
       "properties": {
         "available": { "const": false },
-        "reason": { "enum": ["insufficient_data", "insufficient_cycles", "implausible", "no_frames", "no_pose_detected"] }
+        "reason": { "enum": ["insufficient_data", "insufficient_cycles", "implausible", "no_frames", "no_pose_detected", "wrong_view"] }
       },
       "additionalProperties": false
     },

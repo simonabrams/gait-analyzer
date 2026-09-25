@@ -29,6 +29,7 @@ import statistics
 from datetime import datetime, timezone
 
 from backend import rear_confidence as rc
+from backend.view_check import classify_view
 
 # Reused (not re-implemented) so the rear view detects strides the same way the
 # side view does; they only depend on ankle landmarks so they work from any view.
@@ -91,9 +92,21 @@ def compute_rear_metrics(pose_frames, fps, video_file=""):
     if not pose_frames or not fps or fps <= 0:
         return _empty_rear_view(video_file, "no_frames", fps, 0, 0.0)
 
+    view = classify_view(pose_frames)
     frames, lr_consistency, swapped = _normalise_orientation(pose_frames)
     if not any(p.get("landmarks") for p in frames):
-        return _empty_rear_view(video_file, "no_pose_detected", fps, len(pose_frames), lr_consistency)
+        return _empty_rear_view(video_file, "no_pose_detected", fps, len(pose_frames), lr_consistency, view=view)
+    if view.view == "side":
+        # A side-on clip in the rear slot: every frontal-plane angle would be
+        # measured edge-on. Say so rather than report noise as a pattern.
+        return _empty_rear_view(
+            video_file, "wrong_view", fps, len(pose_frames), lr_consistency, view=view,
+            user_message=(
+                "This clip looks like it was filmed from the side, not from behind. "
+                "The rear-view slot needs a clip filmed from directly behind you, "
+                "camera at about hip height."
+            ),
+        )
 
     sig = _frame_signals(frames)
     strikes = dict(zip(("left", "right"), _detect_foot_strikes(frames, fps=fps)))
@@ -142,7 +155,7 @@ def compute_rear_metrics(pose_frames, fps, video_file=""):
 
     return {
         "status": gate.status,
-        "meta": _meta(video_file, fps, len(pose_frames), lr_consistency, swapped),
+        "meta": _meta(video_file, fps, len(pose_frames), lr_consistency, swapped, view),
         "confidence_gate": _gate_dict(gate),
         "legs": legs,
         "symmetry": symmetry,
@@ -153,8 +166,8 @@ def compute_rear_metrics(pose_frames, fps, video_file=""):
 # ---------------------------------------------------------------------------
 # Output scaffolding
 # ---------------------------------------------------------------------------
-def _meta(video_file, fps, num_frames, lr_consistency, swapped):
-    return {
+def _meta(video_file, fps, num_frames, lr_consistency, swapped, view=None):
+    meta = {
         "video_file": video_file,
         "analyzed_at": datetime.now(timezone.utc).isoformat(),
         "fps": fps,
@@ -165,6 +178,9 @@ def _meta(video_file, fps, num_frames, lr_consistency, swapped):
         "left_right_consistency": round(lr_consistency, 3),
         "left_right_labels_swapped": swapped,
     }
+    if view is not None:
+        meta["view_check"] = view.as_dict()
+    return meta
 
 
 def _gate_dict(gate):
@@ -188,13 +204,13 @@ def _unavailable_symmetry():
     return {"available": False, "reason": "insufficient_data"}
 
 
-def _empty_rear_view(video_file, reason, fps, num_frames, lr_consistency):
+def _empty_rear_view(video_file, reason, fps, num_frames, lr_consistency, view=None, user_message=None):
     """No usable rear-view data at all — the rear analogue of metrics._empty_results.
     Still a well-formed rear_view object so consumers never special-case shape."""
     gate = rc.RearGateResult(
         status="insufficient_data",
         reason=reason,
-        user_message=(
+        user_message=user_message or (
             "We couldn't find a runner in the rear-view clip. Try filming "
             "directly from behind with your full body in frame and good lighting."
         ),
@@ -204,7 +220,7 @@ def _empty_rear_view(video_file, reason, fps, num_frames, lr_consistency):
     )
     return {
         "status": "insufficient_data",
-        "meta": _meta(video_file, fps, num_frames, lr_consistency, False),
+        "meta": _meta(video_file, fps, num_frames, lr_consistency, False, view),
         "confidence_gate": _gate_dict(gate),
         "legs": {
             leg: {"cycles_detected": 0, "cycles_usable": 0, "reportable": False, **_unavailable_leg(reason)}

@@ -66,6 +66,9 @@ def make_rear_frames(
 
         lm = [_lm(vis=visibility) for _ in range(33)]
         lm[0] = _lm(0.5, 0.20, visibility)
+        # Shoulders at full width, as seen from behind (see backend/view_check.py).
+        lm[11] = _lm(0.42, 0.30, visibility)
+        lm[12] = _lm(0.58, 0.30, visibility)
         lm[23] = _lm(0.45, _HIP_BASE_Y - dy / 2, visibility)  # left hip
         lm[24] = _lm(0.55, _HIP_BASE_Y + dy / 2, visibility)  # right hip
 

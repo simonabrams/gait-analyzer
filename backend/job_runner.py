@@ -17,20 +17,28 @@ from backend.heuristics import evaluate_heuristics
 from backend.metrics import compute_metrics
 from backend.pose_extractor import extract_poses
 from backend.step_timer import StepTimer
+from backend.view_check import ViewCheck, classify_view
 from backend.visualizer import annotate_single_frame, build_frame_to_stride_flags
 
 
-def apply_confidence_gate(results: dict):
+def apply_confidence_gate(results: dict, view: ViewCheck | None = None):
     """Decide whether `results` (a metrics.compute_metrics() output) is
     trustworthy enough to report, and if not, blank out the parts that drive
     coaching and every surface's "hasData" check. Returns (gate, results) —
     results is mutated in place (and also returned, for convenience).
+
+    `view` (backend/view_check.py) hard-fails a clip that clearly wasn't
+    filmed side-on, whatever the other checks say.
 
     Pulled out of run_analysis as its own function, with no I/O, so it's
     unit-testable without a real video/pose pipeline — see
     backend/tests/test_job_runner.py.
     """
     gate = confidence_gate.evaluate(results.get("summary") or {})
+    if view is not None:
+        results.setdefault("meta", {})["view_check"] = view.as_dict()
+        if view.view == "frontal":
+            gate = confidence_gate.wrong_view(gate)
     results.setdefault("meta", {})["confidence_gate"] = {
         "hard_fail": gate.hard_fail,
         "low_confidence": gate.low_confidence,
@@ -196,7 +204,9 @@ def run_analysis(
             # enough to report/coach on BEFORE any surface (annotated video,
             # dashboard PNG, results_json that the web report and Pro PDF both
             # read) is generated. See backend/confidence_gate.py.
-            gate, results = apply_confidence_gate(results)
+            view = classify_view(pose_frames)
+            timer.info.update(view=view.view, shoulder_ratio=view.shoulder_ratio)
+            gate, results = apply_confidence_gate(results, view=view)
         results_from_json = results
 
         report(50, "Generating annotated video...")
@@ -239,7 +249,7 @@ def run_analysis(
             subprocess.run(
                 [
                     "ffmpeg", "-y", "-i", annotated_video_path,
-                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                    "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                     h264_path,
                 ],
                 check=True,

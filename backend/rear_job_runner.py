@@ -110,6 +110,8 @@ def run_rear_analysis(video_path, max_frames=None, max_width=None, target_fps=No
 
         with timer.step("metrics"):
             rear_view = compute_rear_metrics(pose_frames, effective_fps, video_file=video_path.name)
+        view = rear_view["meta"].get("view_check") or {}
+        timer.info.update(view=view.get("view"), shoulder_ratio=view.get("shoulder_ratio"))
 
         pose_by_idx = {p["frame_idx"]: p for p in pose_frames}
         fd_v, annotated_video_path = tempfile.mkstemp(suffix=".mp4", prefix="gait_rear_annotated_")
@@ -134,7 +136,7 @@ def run_rear_analysis(video_path, max_frames=None, max_width=None, target_fps=No
             subprocess.run(
                 [
                     "ffmpeg", "-y", "-i", annotated_video_path,
-                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                    "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                     h264_path,
                 ],
                 check=True,
