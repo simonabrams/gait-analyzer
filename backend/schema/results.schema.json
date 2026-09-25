@@ -97,6 +97,8 @@
           "type": "object",
           "required": ["analyzed_at", "fps", "num_frames", "cycle_normalisation", "synchronized_with_side_view", "left_right_consistency", "left_right_labels_swapped"],
           "properties": {
+            "metrics_version": { "description": "Absent means 1 (hip drop at mid-stance, pronation as a main metric). 2: tilt-cancelled peak hip drop, peak knee alignment, step_width, pronation under experimental.", "enum": [1, 2] },
+            "tilt_offset_deg": { "type": "number", "description": "Median hip-line tilt over the clip (camera roll plus standing pelvic asymmetry). Hip drop already cancels it." },
             "video_file": { "type": "string" },
             "analyzed_at": { "type": "string", "format": "date-time" },
             "fps": { "type": ["number", "null"] },
@@ -172,7 +174,8 @@
 
     "leg": {
       "type": "object",
-      "required": ["cycles_detected", "cycles_usable", "reportable", "hip_drop", "pronation", "knee_valgus"],
+      "description": "metrics_version 1 legs carry pronation at the top level; version 2 legs carry step_width and move pronation under experimental.",
+      "required": ["cycles_detected", "cycles_usable", "reportable", "hip_drop", "knee_valgus"],
       "properties": {
         "cycles_detected": { "type": "integer", "minimum": 0 },
         "cycles_usable": { "type": "integer", "minimum": 0 },
@@ -180,8 +183,15 @@
         "stance_pct": { "type": "number", "description": "Approximate stance phase, % of gait cycle." },
         "midstance_pct": { "type": "number", "description": "Mid-stance, % of gait cycle." },
         "hip_drop": { "$ref": "#/$defs/hip_drop_metric" },
+        "knee_valgus": { "$ref": "#/$defs/knee_valgus_metric" },
+        "step_width": { "$ref": "#/$defs/step_width_metric" },
         "pronation": { "$ref": "#/$defs/pronation_metric" },
-        "knee_valgus": { "$ref": "#/$defs/knee_valgus_metric" }
+        "experimental": {
+          "description": "Computed but not shown or scored.",
+          "type": "object",
+          "properties": { "pronation": { "$ref": "#/$defs/pronation_metric" } },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },
@@ -202,9 +212,10 @@
       "properties": {
         "available": { "const": true },
         "value_deg": { "type": "integer", "description": "Rounded to a coarse step (see rear_confidence.DISPLAY_STEP_DEG); a pattern indicator, not a precise angle." },
+        "ci95_deg": { "type": "number", "minimum": 0, "description": "Half-width of a 95% bootstrap interval of the median across cycles (stride-to-stride consistency only). metrics_version 2+." },
         "pattern": { "type": "string" },
         "window_pct": {
-          "description": "[start, end] of the window this was measured over, % of gait cycle. hip_drop is measured at mid-stance (start == end); the others from initial contact (0) through mid-stance.",
+          "description": "[start, end] of the window this was measured over, % of gait cycle. metrics_version 1: hip_drop at mid-stance (start == end), others from initial contact through mid-stance. Version 2: hip_drop and step_width over stance, knee alignment over the first 60% of stance.",
           "type": "array",
           "items": { "type": "number", "minimum": 0, "maximum": 100 },
           "minItems": 2,
@@ -221,8 +232,38 @@
       "additionalProperties": false
     },
 
+    "metric_available_pct": {
+      "type": "object",
+      "required": ["available", "value_pct", "pattern", "window_pct", "cycles_used", "error_margin_pct", "confidence", "disclaimer"],
+      "properties": {
+        "available": { "const": true },
+        "value_pct": { "type": "integer", "description": "% of hip width, rounded to a coarse step." },
+        "ci95_pct": { "type": "number", "minimum": 0 },
+        "pattern": { "type": "string" },
+        "window_pct": { "type": "array", "items": { "type": "number", "minimum": 0, "maximum": 100 }, "minItems": 2, "maxItems": 2 },
+        "cycles_used": { "type": "integer", "minimum": 1 },
+        "error_margin_pct": { "type": ["number", "null"] },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "disclaimer": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "step_width_metric": {
+      "description": "Where the stance foot lands relative to the pelvis midline, % of hip width (0 = on the midline, negative = crossover). metrics_version 2+.",
+      "oneOf": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/metric_available_pct" },
+            { "properties": { "pattern": { "enum": ["typical", "narrow", "crossover"] } } }
+          ]
+        },
+        { "$ref": "#/$defs/metric_unavailable" }
+      ]
+    },
+
     "hip_drop_metric": {
-      "description": "Degrees the swing-side hip sits below the stance-side hip at mid-stance (positive = drop).",
+      "description": "Degrees the swing-side hip drops (positive = drop). metrics_version 1: below the stance-side hip at mid-stance. Version 2: peak during stance minus the value at that leg's initial contact.",
       "oneOf": [
         {
           "allOf": [
@@ -274,7 +315,8 @@
               "properties": {
                 "hip_drop": { "type": "integer", "minimum": 0, "maximum": 100 },
                 "pronation": { "type": "integer", "minimum": 0, "maximum": 100 },
-                "knee_valgus": { "type": "integer", "minimum": 0, "maximum": 100 }
+                "knee_valgus": { "type": "integer", "minimum": 0, "maximum": 100 },
+                "step_width": { "type": "integer", "minimum": 0, "maximum": 100 }
               },
               "additionalProperties": false,
               "minProperties": 2
@@ -305,7 +347,7 @@
 
     "leg_curves": {
       "type": "object",
-      "required": ["hip_drop_deg", "pronation_deg", "knee_valgus_deg"],
+      "required": ["hip_drop_deg", "knee_valgus_deg"],
       "properties": {
         "hip_drop_deg": { "$ref": "#/$defs/curve" },
         "pronation_deg": { "$ref": "#/$defs/curve" },

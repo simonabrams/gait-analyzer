@@ -80,9 +80,9 @@ export default function AddRearVideoControl({ runId }: { runId: string }) {
         </span>
       </div>
       <p className="text-xs text-gray-400 leading-relaxed">
-        A clip filmed from directly behind unlocks hip drop, pronation and knee valgus
-        patterns that a side-on video can&apos;t see. It&apos;s analysed separately and
-        never affects the results above.
+        A clip filmed from directly behind shows hip drop, knee alignment and step width,
+        patterns a side-on video can&apos;t see. It&apos;s analysed separately and never
+        changes the results above.
       </p>
 
       {busy ? (

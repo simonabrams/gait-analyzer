@@ -44,7 +44,7 @@ export default function SummaryStrip({ summary, flags, rearView }: SummaryStripP
     focusAreas.push(humanFlagLabel(f.metric));
   }
   if (rearView?.symmetry?.available && rearView.symmetry.band !== "symmetric") {
-    focusAreas.push("left/right asymmetry");
+    focusAreas.push("left/right balance (rear view)");
   }
 
   // Side-only, worst-first, capped at 2 — matches what "What to work on"

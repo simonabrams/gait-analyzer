@@ -1,11 +1,16 @@
 import type { RearLeg, RearMetric, RearMetricTier, RearSymmetry, RearView } from "@/lib/api";
 import MetricTooltip from "@/components/MetricTooltip";
 
-/** Renders results.rear_view — the frontal-plane hip drop / pronation /
- * knee valgus / symmetry patterns from an optional rear-view video (see
+/** Renders results.rear_view — hip drop / knee alignment / step width and
+ * left/right balance from an optional rear-view video (see
  * backend/rear_metrics.py, backend/rear_confidence.py). A separate component
  * from MetricCards rather than an extension of it: MetricCards is hardcoded
- * to exactly 3 flat side-view metrics, not shaped for per-leg/tiered data. */
+ * to exactly 3 flat side-view metrics, not shaped for per-leg/tiered data.
+ *
+ * Older rear results (metrics_version 1) have pronation and no step width;
+ * pronation is no longer shown for any run (too short a line to track from a
+ * phone camera, and not linked to injury risk), and step width only appears
+ * when present. */
 export default function RearViewSection({ rearView }: { rearView: RearView }) {
   if (rearView.status === "insufficient_data") {
     return (
@@ -35,6 +40,10 @@ export default function RearViewSection({ rearView }: { rearView: RearView }) {
         <LegCard title="Right Leg" leg={rearView.legs.right} />
       </div>
       {rearView.symmetry && <SymmetryCard symmetry={rearView.symmetry} />}
+      <p className="text-xs text-gray-500 text-center">
+        Rear-view patterns are rougher than the side-view numbers above. Use them to spot
+        left/right differences and changes between sessions.
+      </p>
     </div>
   );
 }
@@ -45,28 +54,51 @@ const TIER_STYLES: Record<RearMetricTier, string> = {
   high: "bg-primary/15 text-primary",
 };
 
-function TierBadge({ tier }: { tier: RearMetricTier }) {
+/** How sure we are of the reading — a different axis from whether the
+ * reading itself is good, so it says "reliability" rather than a bare tier. */
+function ReliabilityBadge({ tier }: { tier: RearMetricTier }) {
   return (
     <span
       className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded whitespace-nowrap ${TIER_STYLES[tier]}`}
+      title="How consistent and trackable this reading was — not whether the result is good or bad."
     >
-      {tier}
+      {tier} reliability
     </span>
   );
 }
 
-/** "pronation_pattern" -> "Pronation pattern", "typical" -> "Typical". */
-function formatPattern(pattern: string): string {
+const PATTERN_LABELS: Record<string, string> = {
+  // hip drop
+  typical: "Typical",
+  elevated: "Elevated",
+  pronounced: "Pronounced",
+  // knee alignment (backend key: knee_valgus)
+  neutral: "Tracks straight",
+  valgus_pattern: "Knee tracks inward",
+  varus_pattern: "Knee tracks outward",
+  // step width
+  narrow: "Narrow",
+  crossover: "Crosses midline",
+  // left/right balance bands
+  symmetric: "Balanced",
+  mild_asymmetry: "Slight difference",
+  notable_asymmetry: "Noticeable difference",
+};
+
+function patternLabel(pattern: string): string {
+  if (PATTERN_LABELS[pattern]) return PATTERN_LABELS[pattern];
   const spaced = pattern.replace(/_/g, " ");
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-/** Explicit +/- on every value (not just an implied minus) — direction is
- * real, meaningful data here (pronation vs. supination, valgus vs. varus,
- * drop vs. hike — see backend/rear_confidence.py's pattern_for()), never
- * collapsed to an unsigned magnitude. */
-function formatSignedDeg(value: number): string {
-  return `${value > 0 ? "+" : ""}${value}°`;
+/** Explicit +/- on every angle (not just an implied minus) — direction is
+ * real, meaningful data here (inward vs. outward knee, drop vs. hike — see
+ * backend/rear_confidence.py's pattern_for()), never collapsed to an
+ * unsigned magnitude. Step width is a distance: % of hip width. */
+function formatValue(metric: Extract<RearMetric, { available: true }>): string {
+  if (metric.value_pct != null) return `${metric.value_pct}%`;
+  const v = metric.value_deg ?? 0;
+  return `${v > 0 ? "+" : ""}${v}°`;
 }
 
 function MetricRow({ label, metric }: { label: string; metric: RearMetric }) {
@@ -79,10 +111,13 @@ function MetricRow({ label, metric }: { label: string; metric: RearMetric }) {
       {metric.available ? (
         <div className="text-right">
           <div className="flex items-center gap-2 justify-end">
-            <span className="text-white font-mono font-semibold text-sm">{formatSignedDeg(metric.value_deg)}</span>
-            <TierBadge tier={metric.confidence.tier} />
+            <span className="text-white font-mono font-semibold text-sm">{formatValue(metric)}</span>
+            <ReliabilityBadge tier={metric.confidence.tier} />
           </div>
-          <p className="text-xs text-gray-400 mt-0.5">{formatPattern(metric.pattern)}</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {patternLabel(metric.pattern)}
+            {metric.value_pct != null && <span className="text-gray-500"> · of hip width</span>}
+          </p>
         </div>
       ) : (
         <span className="text-xs text-gray-500 pt-0.5">Not enough data</span>
@@ -95,9 +130,9 @@ function LegCard({ title, leg }: { title: string; leg: RearLeg }) {
   return (
     <div className="bg-secondary border border-white/10 rounded-xl p-5">
       <p className="font-mono text-[11px] tracking-[0.12em] text-primary uppercase mb-1">{title}</p>
-      <MetricRow label="Hip Drop" metric={leg.hip_drop} />
-      <MetricRow label="Pronation" metric={leg.pronation} />
-      <MetricRow label="Knee Valgus" metric={leg.knee_valgus} />
+      <MetricRow label="Hip drop" metric={leg.hip_drop} />
+      <MetricRow label="Knee alignment" metric={leg.knee_valgus} />
+      {leg.step_width && <MetricRow label="Step width" metric={leg.step_width} />}
     </div>
   );
 }
@@ -107,7 +142,7 @@ function SymmetryCard({ symmetry }: { symmetry: RearSymmetry }) {
     return (
       <div className="bg-secondary border border-white/10 rounded-xl p-5">
         <p className="text-sm text-gray-400">
-          Not enough matching data on both legs to compute a symmetry score.
+          Not enough matching data on both legs to compare left and right.
         </p>
       </div>
     );
@@ -117,17 +152,17 @@ function SymmetryCard({ symmetry }: { symmetry: RearSymmetry }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center">
           <p className="font-mono text-[11px] tracking-[0.12em] text-primary uppercase">
-            L/R Symmetry
+            Left/right balance
           </p>
           <MetricTooltip content={symmetry.disclaimer} />
         </div>
-        <TierBadge tier={symmetry.confidence.tier} />
+        <ReliabilityBadge tier={symmetry.confidence.tier} />
       </div>
       <div className="flex items-baseline gap-2 mt-2">
         <span className="text-[28px] font-mono font-semibold text-white leading-none">{symmetry.score}</span>
         <span className="text-gray-400 text-sm">/ 100</span>
       </div>
-      <p className="text-sm text-gray-300 mt-0.5">{formatPattern(symmetry.band)}</p>
+      <p className="text-sm text-gray-300 mt-0.5">{patternLabel(symmetry.band)}</p>
     </div>
   );
 }

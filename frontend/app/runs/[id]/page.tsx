@@ -330,7 +330,7 @@ export default async function RunResultPage({ params, searchParams }: Props) {
         <div className="space-y-4">
           <div>
             <SectionEyebrow label="Rear View" />
-            <h2 className="text-xl font-semibold text-white mt-1">Frontal-Plane Patterns</h2>
+            <h2 className="text-xl font-semibold text-white mt-1">Balance &amp; Alignment</h2>
           </div>
           <RearViewSection rearView={run.results.rear_view} />
         </div>

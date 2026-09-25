@@ -111,6 +111,6 @@ def test_symmetry_bands():
 
 
 def test_every_metric_has_a_disclaimer_and_valgus_states_the_margin():
-    assert set(rc.DISCLAIMERS) == {"hip_drop", "pronation", "knee_valgus", "symmetry"}
+    assert set(rc.DISCLAIMERS) == {"hip_drop", "pronation", "knee_valgus", "step_width", "symmetry"}
     assert "±19°" in rc.DISCLAIMERS["knee_valgus"]
     assert all("session" in d for d in rc.DISCLAIMERS.values())
