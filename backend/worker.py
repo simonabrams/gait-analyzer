@@ -25,7 +25,7 @@ from backend.storage import (
     download_file,
     upload_file,
 )
-from backend.video_preprocessor import preprocess_video
+from backend.video_preprocessor import preprocess_video, upload_summary
 
 logger = logging.getLogger(__name__)
 
@@ -199,16 +199,27 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
             target_height = int(os.environ.get("VIDEO_MAX_HEIGHT", "720"))
         except ValueError:
             pass
+        max_frames = None
+        max_width = None
+        target_fps = None
+        try:
+            nf = int(os.environ.get("GAIT_MAX_FRAMES", "0"))
+            nw = int(os.environ.get("GAIT_MAX_WIDTH", "0"))
+            tf = float(os.environ.get("GAIT_TARGET_FPS", "0"))
+            max_frames = nf if nf > 0 else None
+            max_width = nw if nw > 0 else None
+            target_fps = tf if tf > 0 else None
+        except ValueError:
+            pass
+
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as preprocessed_fd:
             preprocessed_path = preprocessed_fd.name
         with timer.step("preprocess"):
             preprocess_meta = preprocess_video(
-                str(video_path), preprocessed_path, target_height=target_height
+                str(video_path), preprocessed_path, target_height=target_height,
+                max_frames=max_frames, target_fps=target_fps,
             )
-        timer.info.update(
-            original_resolution=(preprocess_meta or {}).get("original_resolution"),
-            clip_sec=(preprocess_meta or {}).get("output_duration_sec"),
-        )
+        timer.info.update(upload_summary(preprocess_meta))
         run.preprocessing_meta = preprocess_meta
         raw_creation = preprocess_meta.get("creation_time_iso")
         run.recorded_at = (
@@ -226,19 +237,6 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
 
         def on_progress(percent: float, message: str) -> None:
             _update_progress(run_id, int(min(percent, 100)))
-
-        max_frames = None
-        max_width = None
-        target_fps = None
-        try:
-            nf = int(os.environ.get("GAIT_MAX_FRAMES", "0"))
-            nw = int(os.environ.get("GAIT_MAX_WIDTH", "0"))
-            tf = float(os.environ.get("GAIT_TARGET_FPS", "0"))
-            max_frames = nf if nf > 0 else None
-            max_width = nw if nw > 0 else None
-            target_fps = tf if tf > 0 else None
-        except ValueError:
-            pass
 
         out = run_analysis(
             preprocessed_path,

@@ -26,7 +26,7 @@ from backend.models import Run, RunVideo, VideoViewType
 from backend.rear_job_runner import run_rear_analysis
 from backend.step_timer import StepTimer
 from backend.storage import download_file, rear_annotated_video_key, upload_file
-from backend.video_preprocessor import preprocess_video
+from backend.video_preprocessor import preprocess_video, upload_summary
 from backend.worker import app
 
 logger = logging.getLogger(__name__)
@@ -111,16 +111,16 @@ def process_rear_video(self, run_id: str, rear_video_r2_key: str) -> None:
             target_height = int(os.environ.get("VIDEO_MAX_HEIGHT", "720"))
         except ValueError:
             target_height = 720
+        max_frames, max_width, target_fps = _limits_from_env()
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as fd:
             preprocessed_path = fd.name
         with timer.step("preprocess"):
-            preprocess_meta = preprocess_video(str(video_path), preprocessed_path, target_height=target_height)
-        timer.info.update(
-            original_resolution=(preprocess_meta or {}).get("original_resolution"),
-            clip_sec=(preprocess_meta or {}).get("output_duration_sec"),
-        )
+            preprocess_meta = preprocess_video(
+                str(video_path), preprocessed_path, target_height=target_height,
+                max_frames=max_frames, target_fps=target_fps,
+            )
+        timer.info.update(upload_summary(preprocess_meta))
 
-        max_frames, max_width, target_fps = _limits_from_env()
         out = run_rear_analysis(
             preprocessed_path, max_frames=max_frames, max_width=max_width, target_fps=target_fps,
             timer=timer,

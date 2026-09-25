@@ -38,7 +38,7 @@ class StepTimer:
         parts = [f"total={self.total():.1f}s"]
         parts += [f"{name}={secs:.1f}s" for name, secs in self.steps.items()]
         parts += [
-            f"{key}={val:.1f}" if isinstance(val, float) else f"{key}={val}"
+            f"{key}={round(val, 2)}" if isinstance(val, float) else f"{key}={val}"
             for key, val in self.info.items()
         ]
         return " ".join(parts)

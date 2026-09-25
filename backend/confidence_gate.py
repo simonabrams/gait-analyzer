@@ -123,3 +123,29 @@ def evaluate(summary: dict) -> GateResult:
         usable_stride_count=usable,
         computed_cadence=cadence,
     )
+
+
+WRONG_VIEW_MESSAGE = (
+    "This clip looks like it was filmed from behind or in front, not from the "
+    "side, so we can't measure knee drive, lean or foot strike from it. The "
+    "main video needs a side-on view. If this is your rear-view clip, add it "
+    "in the rear-view slot instead."
+)
+
+
+def wrong_view(base: GateResult) -> GateResult:
+    """Hard fail for a clip that isn't side-on (see backend/view_check.py).
+    Keeps base's stride counts so the reason stays debuggable. Takes priority
+    over every other outcome: a frontal clip can pass the stride-count and
+    plausibility checks (cadence reads fine from any angle) while its joint
+    angles are meaningless."""
+    return GateResult(
+        hard_fail=True,
+        low_confidence=False,
+        reason="wrong_view",
+        reason_metric=None,
+        detected_stride_count=base.detected_stride_count,
+        usable_stride_count=base.usable_stride_count,
+        computed_cadence=base.computed_cadence,
+        user_message=WRONG_VIEW_MESSAGE,
+    )

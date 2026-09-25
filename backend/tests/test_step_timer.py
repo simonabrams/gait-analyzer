@@ -12,7 +12,7 @@ def test_steps_accumulate_and_summary_lists_them_in_order():
     summary = t.summary()
     assert summary.startswith("total=")
     assert "pose=3.0s decode=0.2s" in summary
-    assert "source_fps=59.9 frames_used=300 truncated=True" in summary
+    assert "source_fps=59.94 frames_used=300 truncated=True" in summary
 
 
 def test_step_records_time_even_when_the_block_raises():
