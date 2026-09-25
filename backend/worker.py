@@ -18,6 +18,7 @@ from backend.analytics import capture as posthog_capture
 from backend.database import get_db_session
 from backend.job_runner import run_analysis
 from backend.models import Run, RunStatus, Subscription, SubscriptionTier
+from backend.step_timer import StepTimer
 from backend.storage import (
     annotated_video_key,
     dashboard_image_key,
@@ -185,10 +186,13 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
         return
     temp_path = None
     preprocessed_path = None
+    timer = StepTimer()
+    timing_status = "error"
     try:
         temp_path = tempfile.mkdtemp(prefix="gait_")
         video_path = Path(temp_path) / "input.mp4"
-        download_file(raw_video_r2_key, str(video_path))
+        with timer.step("download"):
+            download_file(raw_video_r2_key, str(video_path))
 
         target_height = 720
         try:
@@ -197,8 +201,13 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
             pass
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as preprocessed_fd:
             preprocessed_path = preprocessed_fd.name
-        preprocess_meta = preprocess_video(
-            str(video_path), preprocessed_path, target_height=target_height
+        with timer.step("preprocess"):
+            preprocess_meta = preprocess_video(
+                str(video_path), preprocessed_path, target_height=target_height
+            )
+        timer.info.update(
+            original_resolution=(preprocess_meta or {}).get("original_resolution"),
+            clip_sec=(preprocess_meta or {}).get("output_duration_sec"),
         )
         run.preprocessing_meta = preprocess_meta
         raw_creation = preprocess_meta.get("creation_time_iso")
@@ -238,21 +247,24 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
             max_frames=max_frames,
             max_width=max_width,
             target_fps=target_fps,
+            timer=timer,
         )
         gate = out.get("gate")
 
         ann_key = annotated_video_key(run_id)
-        upload_file(out["annotated_video_path"], ann_key)
-        run.annotated_video_r2_key = ann_key
+        with timer.step("upload"):
+            upload_file(out["annotated_video_path"], ann_key)
+            run.annotated_video_r2_key = ann_key
 
-        # A confidence-gate hard fail produces no dashboard PNG at all (see
-        # job_runner.run_analysis) -- nothing to upload or link.
-        if out.get("dashboard_path"):
-            dash_key = dashboard_image_key(run_id)
-            upload_file(out["dashboard_path"], dash_key)
-            run.dashboard_image_r2_key = dash_key
+            # A confidence-gate hard fail produces no dashboard PNG at all (see
+            # job_runner.run_analysis) -- nothing to upload or link.
+            if out.get("dashboard_path"):
+                dash_key = dashboard_image_key(run_id)
+                upload_file(out["dashboard_path"], dash_key)
+                run.dashboard_image_r2_key = dash_key
 
         _finalize_run(db, run, out)
+        timing_status = "complete"
 
         _grant_referral_bonus_if_eligible(db, run)
 
@@ -288,6 +300,7 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
             except OSError:
                 pass
     except celery.exceptions.SoftTimeLimitExceeded:
+        timing_status = "timeout"
         _mark_failed(db, run, "Analysis timed out (video may be too long or complex). Please try a shorter clip.")
         if run.user_id:
             posthog_capture(run.user_id, "run_failed", {"error_type": "timeout"})
@@ -298,6 +311,7 @@ def process_video(self, run_id: str, raw_video_r2_key: str, height_cm: int) -> N
             posthog_capture(run.user_id, "run_failed", {"error_type": type(e).__name__})
         raise
     finally:
+        timer.log(logger, "side", run_id, timing_status)
         _current_run_id = None
         db.close()
         if preprocessed_path and os.path.exists(preprocessed_path):

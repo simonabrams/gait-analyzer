@@ -24,6 +24,7 @@ from backend.analytics import capture as posthog_capture
 from backend.database import get_db_session
 from backend.models import Run, RunVideo, VideoViewType
 from backend.rear_job_runner import run_rear_analysis
+from backend.step_timer import StepTimer
 from backend.storage import download_file, rear_annotated_video_key, upload_file
 from backend.video_preprocessor import preprocess_video
 from backend.worker import app
@@ -98,10 +99,13 @@ def process_rear_video(self, run_id: str, rear_video_r2_key: str) -> None:
 
     temp_dir = None
     preprocessed_path = None
+    timer = StepTimer()
+    timing_status = "error"
     try:
         temp_dir = tempfile.mkdtemp(prefix="gait_rear_")
         video_path = Path(temp_dir) / "rear.mp4"
-        download_file(rear_video_r2_key, str(video_path))
+        with timer.step("download"):
+            download_file(rear_video_r2_key, str(video_path))
 
         try:
             target_height = int(os.environ.get("VIDEO_MAX_HEIGHT", "720"))
@@ -109,16 +113,23 @@ def process_rear_video(self, run_id: str, rear_video_r2_key: str) -> None:
             target_height = 720
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as fd:
             preprocessed_path = fd.name
-        preprocess_video(str(video_path), preprocessed_path, target_height=target_height)
+        with timer.step("preprocess"):
+            preprocess_meta = preprocess_video(str(video_path), preprocessed_path, target_height=target_height)
+        timer.info.update(
+            original_resolution=(preprocess_meta or {}).get("original_resolution"),
+            clip_sec=(preprocess_meta or {}).get("output_duration_sec"),
+        )
 
         max_frames, max_width, target_fps = _limits_from_env()
         out = run_rear_analysis(
-            preprocessed_path, max_frames=max_frames, max_width=max_width, target_fps=target_fps
+            preprocessed_path, max_frames=max_frames, max_width=max_width, target_fps=target_fps,
+            timer=timer,
         )
         rear_view = out["rear_view"]
 
         ann_key = rear_annotated_video_key(run_id)
-        upload_file(out["annotated_video_path"], ann_key)
+        with timer.step("upload"):
+            upload_file(out["annotated_video_path"], ann_key)
 
         # "complete" is pipeline state (the task ran); whether the analysis was
         # usable lives in rear_view["status"] (ok / low_confidence / insufficient_data).
@@ -127,6 +138,8 @@ def process_rear_video(self, run_id: str, rear_video_r2_key: str) -> None:
         row.status = "complete"
         row.error_message = None
         db.commit()
+        timing_status = "complete"
+        timer.info["rear_status"] = rear_view["status"]
         _capture(db, run_id, "rear_run_completed", {
             "rear_status": rear_view["status"],
             "reason": (rear_view.get("confidence_gate") or {}).get("reason"),
@@ -138,6 +151,7 @@ def process_rear_video(self, run_id: str, rear_video_r2_key: str) -> None:
             except OSError:
                 pass
     except celery.exceptions.SoftTimeLimitExceeded:
+        timing_status = "timeout"
         mark_rear_failed(db, row, "Rear-view analysis timed out (video may be too long or complex).")
         _capture(db, run_id, "rear_run_failed", {"error_type": "timeout"})
         raise
@@ -146,6 +160,7 @@ def process_rear_video(self, run_id: str, rear_video_r2_key: str) -> None:
         _capture(db, run_id, "rear_run_failed", {"error_type": type(e).__name__})
         raise
     finally:
+        timer.log(logger, "rear", run_id, timing_status)
         _worker._current_rear_run_id = None
         db.close()
         if preprocessed_path and os.path.exists(preprocessed_path):
