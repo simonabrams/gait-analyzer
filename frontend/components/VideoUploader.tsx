@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useDropzone } from "react-dropzone";
+import { useDropzone, type FileRejection } from "react-dropzone";
 import { useAuth } from "@clerk/nextjs";
 import {
   ApiError,
@@ -17,9 +17,10 @@ import {
   isHeightInRange,
   type HeightUnit,
 } from "@/lib/height";
-import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_SIZE_BYTES } from "@/lib/videoValidation";
+import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_SIZE_BYTES, rejectionMessage } from "@/lib/videoValidation";
 import { useRearVideoUpload } from "@/lib/useRearVideoUpload";
 import ConsentModal from "@/components/ConsentModal";
+import FileRejectionAlert from "@/components/FileRejectionAlert";
 import UpgradeModal from "@/components/UpgradeModal";
 import posthog from "posthog-js";
 
@@ -74,6 +75,10 @@ export default function VideoUploader({
         : `Height must be between 100–250 cm (about 3'3″–8'2″).`;
   const [file, setFile] = useState<File | null>(null);
   const [rearFile, setRearFile] = useState<File | null>(null);
+  // Why the last picked/dropped file was refused (too big, wrong type) —
+  // react-dropzone rejects silently otherwise.
+  const [fileRejection, setFileRejection] = useState<string | null>(null);
+  const [rearFileRejection, setRearFileRejection] = useState<string | null>(null);
   const [showRearDropzone, setShowRearDropzone] = useState(false);
   // Set once the side run is created — the rear upload can't start before
   // this exists (POST /api/runs/{id}/rear-video needs a real run id).
@@ -117,8 +122,9 @@ export default function VideoUploader({
     localStorage.setItem("gait_height_cm", String(cm));
   };
 
-  const onDrop = useCallback((accepted: File[]) => {
+  const onDrop = useCallback((accepted: File[], rejected: FileRejection[]) => {
     setFile(accepted[0] ?? null);
+    setFileRejection(rejectionMessage(rejected));
     setError(null);
   }, []);
 
@@ -133,8 +139,9 @@ export default function VideoUploader({
     disabled: isActive,
   });
 
-  const onRearDrop = useCallback((accepted: File[]) => {
+  const onRearDrop = useCallback((accepted: File[], rejected: FileRejection[]) => {
     setRearFile(accepted[0] ?? null);
+    setRearFileRejection(rejectionMessage(rejected));
   }, []);
 
   const { getRootProps: getRearRootProps, getInputProps: getRearInputProps, isDragActive: isRearDragActive } = useDropzone({
@@ -303,7 +310,9 @@ export default function VideoUploader({
         className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
           isDragActive
             ? "border-primary bg-primary/10"
-            : "border-white/30 bg-white/5 hover:border-white/50 hover:bg-white/10"
+            : fileRejection
+              ? "border-red-400/60 bg-red-400/5 hover:bg-red-400/10"
+              : "border-white/30 bg-white/5 hover:border-white/50 hover:bg-white/10"
         }`}
       >
         <input {...getInputProps()} />
@@ -319,6 +328,7 @@ export default function VideoUploader({
           </>
         )}
       </div>
+      <FileRejectionAlert message={fileRejection} />
 
       {/* Progressive disclosure: zero visual footprint for anyone who doesn't
           click it. Hidden once the side upload starts — see the status line
@@ -331,7 +341,9 @@ export default function VideoUploader({
               className={`border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-colors ${
                 isRearDragActive
                   ? "border-primary bg-primary/10"
-                  : "border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10"
+                  : rearFileRejection
+                    ? "border-red-400/60 bg-red-400/5 hover:bg-red-400/10"
+                    : "border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10"
               }`}
             >
               <input {...getRearInputProps()} />
@@ -343,11 +355,17 @@ export default function VideoUploader({
                 </p>
               )}
             </div>
+            {rearFileRejection && (
+              <div className="mt-2">
+                <FileRejectionAlert message={rearFileRejection} />
+              </div>
+            )}
             <button
               type="button"
               onClick={() => {
                 setShowRearDropzone(false);
                 setRearFile(null);
+                setRearFileRejection(null);
               }}
               className="text-xs text-gray-500 hover:text-gray-300 mt-1.5"
             >

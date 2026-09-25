@@ -13,10 +13,16 @@ def _run(**kw):
     return rm.compute_rear_metrics(frames, kw.get("fps", FPS), video_file="rear.mp4")
 
 
+def _obj(rv, leg, metric):
+    if metric in rm.EXPERIMENTAL_METRICS:
+        return rv["legs"][leg]["experimental"][metric]
+    return rv["legs"][leg][metric]
+
+
 def _val(rv, leg, metric):
-    obj = rv["legs"][leg][metric]
+    obj = _obj(rv, leg, metric)
     assert obj["available"], obj
-    return obj["value_deg"]
+    return obj["value_pct"] if metric == "step_width" else obj["value_deg"]
 
 
 # ---- Per-frame signals: sign conventions -----------------------------------
@@ -75,6 +81,8 @@ def test_symmetric_runner_reports_both_legs_ok():
         assert _val(rv, leg, "hip_drop") == pytest.approx(6, abs=2)
         assert _val(rv, leg, "pronation") == pytest.approx(4, abs=3)
         assert _val(rv, leg, "knee_valgus") == pytest.approx(8, abs=5)  # displayed in 5 deg steps
+        assert _val(rv, leg, "step_width") == pytest.approx(50, abs=5)  # feet under the hip joints
+    assert rv["meta"]["metrics_version"] == rm.METRICS_VERSION
     assert rv["symmetry"]["available"]
     assert rv["symmetry"]["band"] == "symmetric"
 
@@ -84,9 +92,11 @@ def test_stance_and_midstance_are_reported_as_percent_of_cycle():
     leg = rv["legs"]["left"]
     assert 30 <= leg["stance_pct"] <= 55
     assert leg["midstance_pct"] == pytest.approx(leg["stance_pct"] / 2, abs=3)
-    # hip drop is measured AT mid-stance; the others span initial contact -> mid-stance.
-    assert leg["hip_drop"]["window_pct"][0] == leg["hip_drop"]["window_pct"][1] == leg["midstance_pct"]
-    assert leg["pronation"]["window_pct"] == [0.0, leg["midstance_pct"]]
+    # hip drop and step width span all of stance; knee alignment its first 60%.
+    assert leg["hip_drop"]["window_pct"] == [0.0, leg["stance_pct"]]
+    assert leg["step_width"]["window_pct"] == [0.0, leg["stance_pct"]]
+    assert leg["knee_valgus"]["window_pct"][1] == pytest.approx(leg["stance_pct"] * 0.6, abs=0.2)
+    assert leg["experimental"]["pronation"]["window_pct"] == [0.0, leg["midstance_pct"]]
 
 
 def test_result_is_json_serialisable():
@@ -200,13 +210,13 @@ def test_valgus_is_coarse_flagged_with_its_error_margin_and_disclaimer():
 
 def test_pronation_proxy_never_reads_high_confidence():
     for kw in ({}, {"pronation_left": 12.0}):
-        assert _run(**kw)["legs"]["left"]["pronation"]["confidence"]["tier"] == "low"
+        assert _run(**kw)["legs"]["left"]["experimental"]["pronation"]["confidence"]["tier"] == "low"
 
 
 def test_implausible_metric_is_dropped_alone_not_the_whole_report():
     rv = _run(pronation_left=50.0, pronation_right=50.0)
     # atan of a huge heel offset is still a finite angle; it must not survive the bound.
-    assert rv["legs"]["left"]["pronation"] == {"available": False, "reason": "implausible"}
+    assert rv["legs"]["left"]["experimental"]["pronation"] == {"available": False, "reason": "implausible"}
     assert rv["legs"]["left"]["hip_drop"]["available"]
     assert rv["status"] in ("ok", "low_confidence")
 
@@ -215,3 +225,72 @@ def test_low_visibility_lowers_confidence_scores():
     good = _run()["legs"]["left"]["hip_drop"]["confidence"]["score"]
     poor = _run(visibility=0.6)["legs"]["left"]["hip_drop"]["confidence"]["score"]
     assert poor < good
+
+
+# ---- Phase 2 signal processing: tilt cancellation, smoothing, peaks ---------------
+@pytest.mark.parametrize("roll", [3.0, -6.0])
+def test_camera_roll_no_longer_fakes_asymmetry(roll):
+    """A tilted phone used to add +roll to one leg's hip drop and -roll to the
+    other. Measured from each leg's own initial contact it cancels out."""
+    level, tilted = _run(), _run(camera_roll_deg=roll)
+    for leg in ("left", "right"):
+        assert _val(tilted, leg, "hip_drop") == pytest.approx(_val(level, leg, "hip_drop"), abs=1)
+    assert tilted["symmetry"]["band"] == "symmetric"
+    assert tilted["meta"]["tilt_offset_deg"] == pytest.approx(roll, abs=1)
+    # Knee alignment is an angle between two segments: rotation-invariant.
+    for leg in ("left", "right"):
+        assert _val(tilted, leg, "knee_valgus") == _val(level, leg, "knee_valgus")
+
+
+def test_hip_drop_is_measured_from_the_leg_s_own_foot_strike():
+    rv = _run(hip_drop_left=4.0, hip_drop_right=12.0)
+    assert _val(rv, "left", "hip_drop") == pytest.approx(4, abs=1)
+    # Smoothing softens a sharp synthetic peak by ~5%; real pelvic drop is broader.
+    assert _val(rv, "right", "hip_drop") == pytest.approx(12, abs=1.5)
+    assert rv["legs"]["right"]["hip_drop"]["pattern"] == "pronounced"
+    assert rv["legs"]["left"]["hip_drop"]["pattern"] == "typical"
+
+
+def test_smoothing_keeps_noisy_landmarks_usable():
+    noisy = _run(noise=0.003, seed=1)
+    assert noisy["status"] in ("ok", "low_confidence")
+    for leg in ("left", "right"):
+        assert _val(noisy, leg, "hip_drop") == pytest.approx(6, abs=3)
+        assert _obj(noisy, leg, "hip_drop")["ci95_deg"] < 3
+
+
+def test_smoothing_filters_jitter_without_moving_real_points():
+    frames = make_rear_frames(noise=0.004, seed=2)
+    clean = make_rear_frames()
+    smoothed = rm._smooth_landmarks(frames, FPS)
+    def err(fs):
+        return sum(abs(f["landmarks"][23]["y"] - c["landmarks"][23]["y"]) for f, c in zip(fs, clean))
+
+    assert err(smoothed) < 0.7 * err(frames)
+    assert frames[0]["landmarks"][23]["y"] != smoothed[0]["landmarks"][23]["y"]  # new dicts, input untouched
+    assert rm._smooth_landmarks(frames, 12.0) is frames  # too low a frame rate for an 8 Hz cutoff
+
+
+def test_varus_knee_reports_its_most_varus_frame():
+    assert rm._peak_in_direction([-3, -8, -5]) == -8
+    assert rm._peak_in_direction([2, 9, 4]) == 9
+    assert rm._peak_in_direction([None, None]) is None
+    assert _val(_run(valgus_left=-12.0, valgus_right=-12.0), "left", "knee_valgus") < 0
+
+
+# ---- Phase 3: step width -------------------------------------------------------------
+def test_step_width_patterns():
+    for offset, pattern in ((50.0, "typical"), (5.0, "narrow"), (-20.0, "crossover")):
+        rv = _run(foot_offset_pct=offset)
+        assert _val(rv, "left", "step_width") == pytest.approx(offset, abs=5)
+        assert rv["legs"]["left"]["step_width"]["pattern"] == pattern
+    # Moving the feet doesn't change knee alignment (knee stays on the hip-ankle line + offset).
+    assert _val(_run(foot_offset_pct=-20.0), "left", "knee_valgus") == _val(_run(), "left", "knee_valgus")
+
+
+def test_pronation_is_experimental_and_out_of_symmetry():
+    rv = _run()
+    assert "pronation" not in rv["legs"]["left"]
+    assert rv["legs"]["left"]["experimental"]["pronation"]["available"]
+    assert set(rv["symmetry"]["components"]) == {"hip_drop", "knee_valgus", "step_width"}
+    assert set(rv["curves"]["left"]) == {"hip_drop_deg", "knee_valgus_deg"}

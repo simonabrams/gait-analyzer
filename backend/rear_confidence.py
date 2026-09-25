@@ -30,7 +30,7 @@ MIN_CYCLES_FOR_CONFIDENT = 10
 # left/right image order for a rear view, per-leg attribution can't be trusted
 # (BlazePose is known to swap left/right on subjects facing away) — report
 # nothing rather than attribute one leg's numbers to the other.
-MIN_LR_CONSISTENCY_FOR_REPORT = 0.6
+MIN_LR_CONSISTENCY_FOR_REPORT = 0.75
 
 # --- Confidence score -> tier ----------------------------------------------
 # Wider bands than a 0.8/0.5 style split would suggest for the side view:
@@ -47,17 +47,23 @@ TIER_CEILING = {
     "hip_drop": "moderate",
     "pronation": "low",
     "knee_valgus": "moderate",
+    "step_width": "moderate",
 }
+
+# Unit each metric is reported in. step_width is a distance, expressed as % of
+# the runner's own hip width (hip-joint to hip-joint) so it needs no camera
+# calibration; the *_DEG tables below hold its values in those % units.
+UNIT = {"hip_drop": "deg", "pronation": "deg", "knee_valgus": "deg", "step_width": "pct"}
 
 # Cycle-to-cycle spread (median absolute deviation, deg) at which the spread
 # component of the confidence score bottoms out at 0. PROVISIONAL.
-SPREAD_REFERENCE_DEG = {"hip_drop": 4.0, "pronation": 6.0, "knee_valgus": 8.0}
+SPREAD_REFERENCE_DEG = {"hip_drop": 4.0, "pronation": 6.0, "knee_valgus": 8.0, "step_width": 15.0}
 
 # --- Error margins -----------------------------------------------------------
 # Only knee valgus has a figure. The others are left None ("unvalidated")
 # rather than invented — a made-up +/- would read as more authoritative than
 # the truth, which is that we don't have one. Fill these in when sourced.
-ERROR_MARGIN_DEG = {"hip_drop": None, "pronation": None, "knee_valgus": 19.0}
+ERROR_MARGIN_DEG = {"hip_drop": None, "pronation": None, "knee_valgus": 19.0, "step_width": None}
 
 # --- Plausibility bounds (deg) ----------------------------------------------
 # Outside these a value is almost certainly a landmark artifact. Unlike the
@@ -68,12 +74,18 @@ METRIC_BOUNDS_DEG = {
     "hip_drop": (-10.0, 30.0),
     "pronation": (-30.0, 35.0),
     "knee_valgus": (-40.0, 40.0),
+    "step_width": (-60.0, 120.0),  # % of hip width
 }
 
 # --- Pattern bands (deg). PROVISIONAL and deliberately wide ------------------
 # hip_drop: positive = the swing-side hip sits lower than the stance-side hip.
-HIP_DROP_ELEVATED_DEG = 8.0
-HIP_DROP_PRONOUNCED_DEG = 14.0
+# Measured as the dip from initial contact to the lowest point in stance (see
+# rear_metrics._cycle_metrics), so a tilted camera or a naturally uneven pelvis
+# doesn't count. Lowered from 8 / 14: in 2D video studies injured runners
+# averaged ~6.4 deg of contralateral pelvic drop vs ~3.7 deg in healthy ones
+# (Bramah et al. 2018). Recalibrate against our own repeatability data.
+HIP_DROP_ELEVATED_DEG = 6.0
+HIP_DROP_PRONOUNCED_DEG = 10.0
 # pronation: positive = pronation (heel everted), negative = supination.
 PRONATION_NEUTRAL_DEG = 8.0
 # knee_valgus: positive = valgus (knee medial), negative = varus. Wider than
@@ -82,12 +94,18 @@ PRONATION_NEUTRAL_DEG = 8.0
 KNEE_VALGUS_NEUTRAL_DEG = 12.0
 
 # --- Display rounding step (deg): coarser = less false precision -------------
-DISPLAY_STEP_DEG = {"hip_drop": 1.0, "pronation": 2.0, "knee_valgus": 5.0}
+# step_width: where the foot lands relative to the body's midline, % of hip
+# width. 0 = on the midline; below it the foot crosses over (crossover gait,
+# linked to higher shin and IT-band load). ~50 = under the hip joint.
+STEP_WIDTH_CROSSOVER_PCT = 0.0
+STEP_WIDTH_NARROW_PCT = 10.0
+
+DISPLAY_STEP_DEG = {"hip_drop": 1.0, "pronation": 2.0, "knee_valgus": 5.0, "step_width": 5.0}
 
 # --- Symmetry ----------------------------------------------------------------
 # Symmetry index SI = 100 * |L - R| / max(mean(|L|, |R|), floor). The floor
 # stops two near-zero values from producing a huge SI out of noise.
-SYMMETRY_FLOOR_DEG = {"hip_drop": 2.0, "pronation": 3.0, "knee_valgus": 3.0}
+SYMMETRY_FLOOR_DEG = {"hip_drop": 2.0, "pronation": 3.0, "knee_valgus": 3.0, "step_width": 10.0}
 SYMMETRY_BAND_SYMMETRIC_MIN = 85
 SYMMETRY_BAND_MILD_MIN = 65
 
@@ -98,8 +116,9 @@ SYMMETRY_BAND_MILD_MIN = 65
 _SESSION_TO_SESSION = "Best used to spot side-to-side differences and changes between sessions."
 DISCLAIMERS = {
     "hip_drop": (
-        "Estimated from the height difference between your hips in a rear-view "
-        "video. " + _SESSION_TO_SESSION
+        "How far your pelvis dips on the swing side between foot strike and the "
+        "lowest point of stance, from a rear-view video. Measured from your own "
+        "foot strike, so a slightly tilted camera doesn't count. " + _SESSION_TO_SESSION
     ),
     "pronation": (
         "A rough proxy from the angle of your ankle-to-heel line, which is short "
@@ -107,12 +126,18 @@ DISCLAIMERS = {
         + _SESSION_TO_SESSION
     ),
     "knee_valgus": (
-        "Knee angles from a single camera can be off by roughly ±19° vs. "
-        "lab-grade motion capture, so treat this as a pattern, not a precise angle. "
+        "Whether your knee tracks inward or outward of the hip-to-ankle line "
+        "during the first half of stance. Knee angles from a single camera can be "
+        "off by roughly ±19° vs. lab-grade motion capture, so treat this as a "
+        "pattern, not a precise angle. " + _SESSION_TO_SESSION
+    ),
+    "step_width": (
+        "Where your foot lands relative to the middle of your body, as a share of "
+        "your hip width. Below zero means the foot crosses the midline. "
         + _SESSION_TO_SESSION
     ),
     "symmetry": (
-        "Combines the three rear-view patterns above, so it carries all of their "
+        "Combines the rear-view patterns above, so it carries all of their "
         "uncertainty. " + _SESSION_TO_SESSION
     ),
 }
@@ -243,6 +268,12 @@ def pattern_for(metric: str, value: float) -> str:
         if value < -KNEE_VALGUS_NEUTRAL_DEG:
             return "varus_pattern"
         return "neutral"
+    if metric == "step_width":
+        if value < STEP_WIDTH_CROSSOVER_PCT:
+            return "crossover"
+        if value < STEP_WIDTH_NARROW_PCT:
+            return "narrow"
+        return "typical"
     raise ValueError(f"unknown rear-view metric: {metric}")
 
 

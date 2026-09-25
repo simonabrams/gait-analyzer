@@ -61,27 +61,34 @@ export interface RearMetricConfidence {
 }
 
 /** One frontal-plane metric for one leg (backend/rear_metrics.py). Value is a
- * pattern indicator, not a precise angle — see `disclaimer` and
- * `error_margin_deg` (null where no validated margin exists). */
+ * pattern indicator, not a precise measurement — see `disclaimer` and
+ * `error_margin_*` (null where no validated margin exists). Angles carry
+ * `value_deg`; step width carries `value_pct` (% of hip width). */
 export type RearMetric =
   | {
       available: true;
-      value_deg: number;
+      value_deg?: number;
+      value_pct?: number;
       pattern: string;
       cycles_used: number;
-      error_margin_deg: number | null;
+      error_margin_deg?: number | null;
+      error_margin_pct?: number | null;
       confidence: RearMetricConfidence;
       disclaimer: string;
     }
   | { available: false; reason: string };
 
+/** metrics_version 1 rows (before step width) carry `pronation` at the top
+ * level and no `step_width`; version 2 moves pronation under `experimental`,
+ * which the UI doesn't show. */
 export interface RearLeg {
   cycles_detected: number;
   cycles_usable: number;
   reportable: boolean;
   hip_drop: RearMetric;
-  pronation: RearMetric;
   knee_valgus: RearMetric;
+  step_width?: RearMetric;
+  pronation?: RearMetric;
 }
 
 export type RearSymmetry =

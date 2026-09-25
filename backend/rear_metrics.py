@@ -19,12 +19,24 @@ coords with y growing downward, median aggregation after outlier rejection):
   frames to a square before pose extraction (job_runner._resize_and_letterbox,
   which the rear runner reuses) — feed this module un-letterboxed landmarks from
   a non-square video and every angle here is skewed by the aspect ratio.
-- Positive hip_drop   = the swing-side hip is lower than the stance-side hip.
+- Positive hip_drop   = the swing-side hip dips below where it was at that
+  leg's initial contact (peak during stance). Measuring from the leg's own
+  initial contact cancels camera roll and a naturally uneven pelvis.
+- Positive knee_valgus = knee medial to the hip-ankle line (peak in the first
+  60% of stance). Shown to users as "knee alignment".
+- step_width = where the stance foot lands relative to the pelvis midline, as
+  % of hip width; negative = crossed the midline.
 - Positive pronation  = heel everted (ankle collapsing medially over the heel).
-- Positive knee_valgus = knee medial to the hip-ankle line.
+  Experimental since metrics_version 2: computed, kept out of the UI and the
+  symmetry score (ankle-to-heel is ~8 px long at pose-model resolution).
+
+Landmarks are low-pass filtered (zero-lag Butterworth, _SMOOTH_CUTOFF_HZ)
+before any angle is computed; cycle segmentation still uses the raw ankle
+signal, which _detect_foot_strikes smooths on its own terms.
 """
 
 import math
+import random
 import statistics
 from datetime import datetime, timezone
 
@@ -47,6 +59,7 @@ from backend.metrics import (
     RIGHT_KNEE,
 )
 
+LEFT_SHOULDER, RIGHT_SHOULDER = 11, 12
 LEFT_HEEL, RIGHT_HEEL = 29, 30
 LEFT_FOOT_INDEX, RIGHT_FOOT_INDEX = 31, 32
 
@@ -82,7 +95,31 @@ _CURVE_POINTS = 100 // _CURVE_STEP_PCT + 1  # 21 samples: 0, 5, ..., 100 %
 # a value there.
 _CURVE_MIN_COVERAGE = 0.5
 
-METRICS = ("hip_drop", "pronation", "knee_valgus")
+# Bumped when the rear_view shape or a metric's definition changes; absent = 1.
+# 2: tilt-cancelled peak hip drop, peak knee alignment, step_width added,
+#    pronation moved under legs.<leg>.experimental, landmark smoothing.
+METRICS_VERSION = 2
+
+# Reported per leg and combined into the symmetry score.
+METRICS = ("hip_drop", "knee_valgus", "step_width")
+# Computed and stored, but not shown or scored (see module docstring).
+EXPERIMENTAL_METRICS = ("pronation",)
+# Metrics with a waveform in `curves` (angles only; step width is a stance value).
+CURVE_METRICS = ("hip_drop", "knee_valgus")
+
+# Knee alignment peak is taken over the first part of stance (loading), where
+# frontal-plane knee collapse happens; late stance is push-off.
+_KNEE_WINDOW_STANCE_FRAC = 0.6
+
+# Zero-lag low-pass filter applied to landmark x/y before computing angles.
+# 8 Hz sits in the 6-10 Hz range used for running kinematics; skipped when the
+# frame rate is too low for it to mean anything.
+_SMOOTH_CUTOFF_HZ = 8.0
+_SMOOTH_ORDER = 2
+_SMOOTH_MIN_RUN = 10  # filtfilt needs more samples than its padding (3 * order + 3)
+_SMOOTH_LANDMARKS = (11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32)
+
+_BOOTSTRAP_SAMPLES = 400
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +145,7 @@ def compute_rear_metrics(pose_frames, fps, video_file=""):
             ),
         )
 
-    sig = _frame_signals(frames)
+    sig = _frame_signals(_smooth_landmarks(frames, fps))
     strikes = dict(zip(("left", "right"), _detect_foot_strikes(frames, fps=fps)))
 
     legs, leg_cycles, all_cycle_counts = {}, {}, {}
@@ -133,19 +170,29 @@ def compute_rear_metrics(pose_frames, fps, video_file=""):
         midstance = statistics.median(c["midstance_pct"] for c in usable)
         legs[leg]["stance_pct"] = round(stance, 1)
         legs[leg]["midstance_pct"] = round(midstance, 1)
-        for metric in METRICS:
-            window = [midstance, midstance] if metric == "hip_drop" else [0.0, midstance]
+        windows = {
+            "hip_drop": [0.0, stance],
+            "knee_valgus": [0.0, stance * _KNEE_WINDOW_STANCE_FRAC],
+            "step_width": [0.0, stance],
+            "pronation": [0.0, midstance],
+        }
+        experimental = {}
+        for metric in METRICS + EXPERIMENTAL_METRICS:
             obj, median = _metric_object(
                 metric,
                 [c[metric] for c in usable],
                 vis=_mean_visibility(frames, leg, metric),
                 fps=fps,
                 lr=lr_consistency,
-                window_pct=[round(w, 1) for w in window],
+                window_pct=[round(w, 1) for w in windows[metric]],
             )
+            if metric in EXPERIMENTAL_METRICS:
+                experimental[metric] = obj
+                continue
             legs[leg][metric] = obj
             if median is not None:
                 medians[metric][leg] = median
+        legs[leg]["experimental"] = experimental
 
     for leg in ("left", "right"):
         legs[leg]["reportable"] = leg in gate.reportable_legs
@@ -155,7 +202,7 @@ def compute_rear_metrics(pose_frames, fps, video_file=""):
 
     return {
         "status": gate.status,
-        "meta": _meta(video_file, fps, len(pose_frames), lr_consistency, swapped, view),
+        "meta": _meta(video_file, fps, len(pose_frames), lr_consistency, swapped, view, sig["tilt"]),
         "confidence_gate": _gate_dict(gate),
         "legs": legs,
         "symmetry": symmetry,
@@ -166,8 +213,9 @@ def compute_rear_metrics(pose_frames, fps, video_file=""):
 # ---------------------------------------------------------------------------
 # Output scaffolding
 # ---------------------------------------------------------------------------
-def _meta(video_file, fps, num_frames, lr_consistency, swapped, view=None):
+def _meta(video_file, fps, num_frames, lr_consistency, swapped, view=None, tilt=None):
     meta = {
+        "metrics_version": METRICS_VERSION,
         "video_file": video_file,
         "analyzed_at": datetime.now(timezone.utc).isoformat(),
         "fps": fps,
@@ -180,6 +228,12 @@ def _meta(video_file, fps, num_frames, lr_consistency, swapped, view=None):
     }
     if view is not None:
         meta["view_check"] = view.as_dict()
+    tilts = [t for t in (tilt or []) if t is not None]
+    if tilts:
+        # Median hip-line tilt over the clip: roughly camera roll plus any
+        # standing pelvic asymmetry. Hip drop already cancels it; recorded so a
+        # tilted-camera warning can use it.
+        meta["tilt_offset_deg"] = round(statistics.median(tilts), 1)
     return meta
 
 
@@ -356,21 +410,103 @@ def knee_valgus_deg(lm, leg):
     return _MEDIAL_DIR[leg] * (thigh - shank)
 
 
+def trunk_angle_deg(lm):
+    """Angle of the hip-midpoint -> shoulder-midpoint line from image-vertical,
+    positive when the shoulders sit to the image-right of the hips. Runners
+    don't lean sideways on average, so its median over a clip is the camera's
+    roll; per frame it also carries lateral trunk sway."""
+    if not _visible(lm, LEFT_HIP, RIGHT_HIP, LEFT_SHOULDER, RIGHT_SHOULDER):
+        return None
+    hx = (lm[LEFT_HIP]["x"] + lm[RIGHT_HIP]["x"]) / 2.0
+    hy = (lm[LEFT_HIP]["y"] + lm[RIGHT_HIP]["y"]) / 2.0
+    sx = (lm[LEFT_SHOULDER]["x"] + lm[RIGHT_SHOULDER]["x"]) / 2.0
+    sy = (lm[LEFT_SHOULDER]["y"] + lm[RIGHT_SHOULDER]["y"]) / 2.0
+    if hy - sy <= 0:  # shoulders must be above the hips
+        return None
+    return math.degrees(math.atan2(sx - hx, hy - sy))
+
+
+def foot_offset_pct(lm, leg, roll_deg=0.0):
+    """Where `leg`'s ankle is relative to the pelvis midline, as % of hip
+    width: positive = on its own side, 0 = on the midline, negative = crossed
+    over. Hip width (hip-joint to hip-joint) is the ruler, so no camera
+    calibration or height is needed. `roll_deg` (the clip's median trunk
+    angle) defines "vertical": without it a 3 deg camera roll moves each foot
+    ~20% of hip width sideways, in opposite directions for the two legs."""
+    idx = _LEG_LANDMARKS[leg]
+    if not _visible(lm, LEFT_HIP, RIGHT_HIP, idx["ankle"]):
+        return None
+    lh, rh = lm[LEFT_HIP], lm[RIGHT_HIP]
+    hip_w = math.hypot(rh["x"] - lh["x"], rh["y"] - lh["y"])
+    if hip_w < _MIN_HIP_SEPARATION:
+        return None
+    dx = lm[idx["ankle"]]["x"] - (lh["x"] + rh["x"]) / 2.0
+    dy = lm[idx["ankle"]]["y"] - (lh["y"] + rh["y"]) / 2.0
+    # Horizontal component of hip-mid -> ankle in a frame rotated by roll_deg.
+    r = math.radians(roll_deg)
+    lateral = dx * math.cos(r) + dy * math.sin(r)
+    return -100.0 * _MEDIAL_DIR[leg] * lateral / hip_w
+
+
 def _frame_signals(frames):
-    tilt, pron, valg = [], {"left": [], "right": []}, {"left": [], "right": []}
+    trunk = [trunk_angle_deg(lm) if (lm := p.get("landmarks")) else None for p in frames]
+    roll = _median_or_none(trunk) or 0.0
+    tilt = []
+    pron, valg, step = ({"left": [], "right": []} for _ in range(3))
     for p in frames:
         lm = p.get("landmarks")
         tilt.append(pelvic_tilt_deg(lm) if lm else None)
         for leg in ("left", "right"):
             pron[leg].append(pronation_deg(lm, leg) if lm else None)
             valg[leg].append(knee_valgus_deg(lm, leg) if lm else None)
-    return {"tilt": tilt, "pronation": pron, "knee_valgus": valg}
+            step[leg].append(foot_offset_pct(lm, leg, roll) if lm else None)
+    return {"tilt": tilt, "pronation": pron, "knee_valgus": valg, "step_width": step, "roll": roll}
+
+
+def _smooth_landmarks(frames, fps):
+    """Zero-lag low-pass filter of each tracked landmark's x and y, applied
+    separately to every run of consecutive frames where that landmark is
+    visible. Gaps are never filled: a filtered value exists only where a real
+    one did. Returns new frame dicts; `frames` is not modified. A no-op when
+    scipy is missing or the frame rate is too low for the cutoff."""
+    nyquist = fps / 2.0
+    if nyquist <= _SMOOTH_CUTOFF_HZ * 1.1:
+        return frames
+    try:
+        import numpy as np
+        from scipy.signal import butter, filtfilt
+    except ImportError:
+        return frames
+    b, a = butter(_SMOOTH_ORDER, _SMOOTH_CUTOFF_HZ / nyquist)
+
+    out = [
+        {**p, "landmarks": [dict(pt) for pt in p["landmarks"]]} if p.get("landmarks") else dict(p)
+        for p in frames
+    ]
+    for i in _SMOOTH_LANDMARKS:
+        run = []
+        for f, p in enumerate(frames):
+            lm = p.get("landmarks")
+            if lm is not None and lm[i].get("visibility", 1.0) >= _VIS_THRESHOLD:
+                run.append(f)
+                if f + 1 < len(frames):
+                    continue
+            if len(run) >= _SMOOTH_MIN_RUN:
+                for axis in ("x", "y"):
+                    vals = np.array([frames[k]["landmarks"][i][axis] for k in run], dtype=float)
+                    filtered = filtfilt(b, a, vals)
+                    for k, v in zip(run, filtered):
+                        out[k]["landmarks"][i][axis] = float(v)
+            run = []
+    return out
 
 
 def _mean_visibility(frames, leg, metric):
     idx = _LEG_LANDMARKS[leg]
     if metric == "hip_drop":
         used = [LEFT_HIP, RIGHT_HIP]
+    elif metric == "step_width":
+        used = [LEFT_HIP, RIGHT_HIP, idx["ankle"]]
     elif metric == "pronation":
         used = [idx["ankle"], idx["heel"]]
     else:
@@ -488,18 +624,46 @@ def _mean_or_none(values):
     return sum(vals) / len(vals) if vals else None
 
 
+def _peak_in_direction(values):
+    """The extreme of `values` on the side its median lies (max for a mostly
+    positive signal, min for a mostly negative one), so a varus knee reports
+    its most-varus frame rather than its least-varus one. None if empty."""
+    vals = [v for v in values if v is not None]
+    if not vals:
+        return None
+    return max(vals) if statistics.median(vals) >= 0 else min(vals)
+
+
 def _cycle_metrics(leg, cycle, sig):
-    """Metrics for one gait cycle of `leg`, each computed at its own point in
-    the cycle: hip drop AT mid-stance (mean of the frames within +/-1 of it, so
-    one blurry frame doesn't decide it — same idea as metrics._knee_angle_window),
-    pronation and knee valgus from initial contact THROUGH mid-stance (median)."""
-    ic, mid = cycle["ic"], cycle["ic"] + (cycle["to"] - cycle["ic"]) / 2.0
-    near_mid = range(max(0, int(math.ceil(mid - 1.0))), min(len(sig["tilt"]) - 1, int(math.floor(mid + 1.0))) + 1)
-    window = range(ic, int(math.floor(mid)) + 1)
+    """Metrics for one gait cycle of `leg` (frames ic..to = stance):
+
+    - hip_drop: peak drop during stance minus the drop at initial contact
+      (mean of frames ic-1..ic+1, so one frame doesn't decide the baseline).
+      Subtracting the leg's own starting point removes camera roll and a
+      naturally uneven pelvis, which previously added +x to one leg and -x
+      to the other and showed up as fake asymmetry.
+    - knee_valgus: peak (in the direction of the median) over the first
+      _KNEE_WINDOW_STANCE_FRAC of stance.
+    - step_width: median foot offset over stance.
+    - pronation (experimental): median from initial contact to mid-stance.
+    """
+    ic, to = cycle["ic"], cycle["to"]
+    n = len(sig["tilt"])
+    mid = ic + (to - ic) / 2.0
+    stance = range(ic, min(to, n - 1) + 1)
+
+    drop = [hip_drop_from_tilt(leg, sig["tilt"][p]) for p in stance]
+    base = _mean_or_none([hip_drop_from_tilt(leg, sig["tilt"][p]) for p in range(max(0, ic - 1), min(n, ic + 2))])
+    peak = max((d for d in drop if d is not None), default=None)
+    hip_drop = peak - base if peak is not None and base is not None else None
+
+    knee_end = ic + max(1, round((to - ic) * _KNEE_WINDOW_STANCE_FRAC))
+    knee_window = range(ic, min(knee_end, n - 1) + 1)
     return {
-        "hip_drop": _mean_or_none([hip_drop_from_tilt(leg, sig["tilt"][p]) for p in near_mid]),
-        "pronation": _median_or_none([sig["pronation"][leg][p] for p in window]),
-        "knee_valgus": _median_or_none([sig["knee_valgus"][leg][p] for p in window]),
+        "hip_drop": hip_drop,
+        "knee_valgus": _peak_in_direction([sig["knee_valgus"][leg][p] for p in knee_window]),
+        "step_width": _median_or_none([sig["step_width"][leg][p] for p in stance]),
+        "pronation": _median_or_none([sig["pronation"][leg][p] for p in range(ic, int(math.floor(mid)) + 1)]),
     }
 
 
@@ -516,16 +680,31 @@ def _metric_object(metric, values, vis, fps, lr, window_pct):
     spread = statistics.median(abs(v - median) for v in vals)
     score = rc.confidence_score(metric, len(vals), vis, fps, lr, spread)
     shown = rc.display_value(metric, median)
+    unit = rc.UNIT[metric]
     return {
         "available": True,
-        "value_deg": shown,
+        f"value_{unit}": shown,
         "pattern": rc.pattern_for(metric, shown),
         "window_pct": window_pct,
         "cycles_used": len(vals),
-        "error_margin_deg": rc.ERROR_MARGIN_DEG[metric],
+        f"ci95_{unit}": round(_bootstrap_ci_halfwidth(vals), 1),
+        f"error_margin_{unit}": rc.ERROR_MARGIN_DEG[metric],
         "confidence": {"score": score, "tier": rc.tier_for(metric, score)},
         "disclaimer": rc.DISCLAIMERS[metric],
     }, median
+
+
+def _bootstrap_ci_halfwidth(vals):
+    """Half-width of a 95% bootstrap interval for the median across cycles:
+    how much the reported value could move if the runner had taken a
+    different set of strides. Seeded, so the same clip always gives the same
+    answer. It measures stride-to-stride consistency only, not camera or
+    pose-model error (that's error_margin_*)."""
+    rng = random.Random(0)
+    meds = sorted(statistics.median(rng.choices(vals, k=len(vals))) for _ in range(_BOOTSTRAP_SAMPLES))
+    lo = meds[int(0.025 * _BOOTSTRAP_SAMPLES)]
+    hi = meds[int(0.975 * _BOOTSTRAP_SAMPLES) - 1]
+    return (hi - lo) / 2.0
 
 
 # ---------------------------------------------------------------------------
@@ -585,7 +764,6 @@ def _curves(leg_cycles, reportable_legs, sig):
             continue
         series_by_metric = {
             "hip_drop": [hip_drop_from_tilt(leg, t) for t in sig["tilt"]],
-            "pronation": sig["pronation"][leg],
             "knee_valgus": sig["knee_valgus"][leg],
         }
         curves = {}

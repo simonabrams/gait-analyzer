@@ -1,14 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useDropzone } from "react-dropzone";
+import { useDropzone, type FileRejection } from "react-dropzone";
 import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { getRunStatus } from "@/lib/api";
 import { getStoredAnonId } from "@/lib/anon";
-import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_SIZE_BYTES } from "@/lib/videoValidation";
+import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_SIZE_BYTES, rejectionMessage } from "@/lib/videoValidation";
 import { useRearVideoUpload } from "@/lib/useRearVideoUpload";
 import ConsentModal from "@/components/ConsentModal";
+import FileRejectionAlert from "@/components/FileRejectionAlert";
 import UpgradeModal from "@/components/UpgradeModal";
 
 /** Lets the OWNER of a completed run attach an optional rear-view video after
@@ -24,6 +25,7 @@ export default function AddRearVideoControl({ runId }: { runId: string }) {
   const [checked, setChecked] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
   const [initialRearStatus, setInitialRearStatus] = useState<string | null>(null);
+  const [fileRejection, setFileRejection] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -53,7 +55,8 @@ export default function AddRearVideoControl({ runId }: { runId: string }) {
   });
 
   const onDrop = useCallback(
-    (accepted: File[]) => {
+    (accepted: File[], rejected: FileRejection[]) => {
+      setFileRejection(rejectionMessage(rejected));
       if (accepted[0]) upload.submit(accepted[0]);
     },
     [upload],
@@ -80,9 +83,9 @@ export default function AddRearVideoControl({ runId }: { runId: string }) {
         </span>
       </div>
       <p className="text-xs text-gray-400 leading-relaxed">
-        A clip filmed from directly behind unlocks hip drop, pronation and knee valgus
-        patterns that a side-on video can&apos;t see. It&apos;s analysed separately and
-        never affects the results above.
+        A clip filmed from directly behind shows hip drop, knee alignment and step width,
+        patterns a side-on video can&apos;t see. It&apos;s analysed separately and never
+        changes the results above.
       </p>
 
       {busy ? (
@@ -115,7 +118,9 @@ export default function AddRearVideoControl({ runId }: { runId: string }) {
             className={`border-2 border-dashed rounded-lg px-4 py-5 text-center cursor-pointer transition-colors ${
               isDragActive
                 ? "border-primary bg-primary/10"
-                : "border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10"
+                : fileRejection
+                  ? "border-red-400/60 bg-red-400/5 hover:bg-red-400/10"
+                  : "border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10"
             }`}
           >
             <input {...getInputProps()} />
@@ -124,6 +129,7 @@ export default function AddRearVideoControl({ runId }: { runId: string }) {
             </p>
             <p className="text-gray-500 text-[11px] mt-1">MP4 or MOV · up to 100 MB</p>
           </div>
+          <FileRejectionAlert message={fileRejection} />
         </>
       )}
 
