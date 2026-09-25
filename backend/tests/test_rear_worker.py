@@ -130,6 +130,23 @@ def test_failure_fails_only_the_rear_video_and_never_touches_the_side_run_or_ref
     assert env.uploads == []
 
 
+def test_timing_line_is_logged_on_success_and_failure(env, monkeypatch, caplog):
+    monkeypatch.setattr(rear_worker, "run_rear_analysis", MagicMock(return_value=_analysis_result()))
+    with caplog.at_level("INFO", logger="backend.rear_worker"):
+        rear_worker.process_rear_video.run(env.run_id, "k")
+    assert f"pipeline_timing view=rear run_id={env.run_id} status=complete" in caplog.text
+    assert "download=" in caplog.text and "upload=" in caplog.text and "rear_status=ok" in caplog.text
+
+    caplog.clear()
+    monkeypatch.setattr(rear_worker, "run_rear_analysis", MagicMock(side_effect=RuntimeError("x")))
+    with env.Session() as db:
+        db.query(RunVideo).one().status = "processing"
+        db.commit()
+    with caplog.at_level("INFO", logger="backend.rear_worker"), pytest.raises(RuntimeError):
+        rear_worker.process_rear_video.run(env.run_id, "k")
+    assert f"pipeline_timing view=rear run_id={env.run_id} status=error" in caplog.text
+
+
 def test_long_error_text_is_capped(env, monkeypatch):
     monkeypatch.setattr(rear_worker, "run_rear_analysis", MagicMock(side_effect=RuntimeError("x" * 5000)))
     with pytest.raises(RuntimeError):

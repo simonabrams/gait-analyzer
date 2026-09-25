@@ -16,6 +16,7 @@ from backend.dashboard import create_dashboard
 from backend.heuristics import evaluate_heuristics
 from backend.metrics import compute_metrics
 from backend.pose_extractor import extract_poses
+from backend.step_timer import StepTimer
 from backend.visualizer import annotate_single_frame, build_frame_to_stride_flags
 
 
@@ -94,11 +95,13 @@ def run_analysis(
     max_frames=None,
     max_width=None,
     target_fps=None,
+    timer=None,
 ):
     video_path = Path(video_path)
     temp_paths = []
     truncated = False
     frames_used = 0
+    timer = timer or StepTimer()
 
     def report(percent, message):
         if progress_callback:
@@ -139,52 +142,61 @@ def run_analysis(
         while True:
             chunk = []
             chunk_timestamps = []
-            for _ in range(CHUNK_SIZE):
-                if max_frames and max_frames > 0 and frames_used >= max_frames:
-                    truncated = True
-                    break
-                # Discard frame_skip-1 frames before keeping one
-                exhausted = False
-                for _ in range(frame_skip - 1):
-                    if not cap.read()[0]:
-                        exhausted = True
+            with timer.step("decode"):
+                for _ in range(CHUNK_SIZE):
+                    if max_frames and max_frames > 0 and frames_used >= max_frames:
+                        truncated = True
                         break
-                if exhausted:
-                    break
-                ts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                frame = _resize_and_letterbox(frame, max_width)
-                if out_w is None:
-                    out_h, out_w = frame.shape[0], frame.shape[1]
-                # Encode and cache before handing the frame to the pose extractor.
-                _, enc = cv2.imencode(".jpg", frame, _JPEG_PARAMS)
-                frame_cache.append(bytes(enc))
-                chunk.append(frame)
-                chunk_timestamps.append(ts_ms)
-                frames_used += 1
+                    # Discard frame_skip-1 frames before keeping one
+                    exhausted = False
+                    for _ in range(frame_skip - 1):
+                        if not cap.read()[0]:
+                            exhausted = True
+                            break
+                    if exhausted:
+                        break
+                    ts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    frame = _resize_and_letterbox(frame, max_width)
+                    if out_w is None:
+                        out_h, out_w = frame.shape[0], frame.shape[1]
+                    # Encode and cache before handing the frame to the pose extractor.
+                    _, enc = cv2.imencode(".jpg", frame, _JPEG_PARAMS)
+                    frame_cache.append(bytes(enc))
+                    chunk.append(frame)
+                    chunk_timestamps.append(ts_ms)
+                    frames_used += 1
             if not chunk:
                 break
             start_idx = frames_used - len(chunk)
-            part = extract_poses(chunk, start_frame_idx=start_idx, timestamps_ms=chunk_timestamps)
+            with timer.step("pose"):
+                part = extract_poses(chunk, start_frame_idx=start_idx, timestamps_ms=chunk_timestamps)
             pose_frames.extend(part)
             del chunk
 
         cap.release()
+        timer.info.update(
+            source_fps=float(fps),
+            effective_fps=float(effective_fps),
+            frames_used=frames_used,
+            truncated=truncated,
+        )
         if not pose_frames:
             raise RuntimeError("No frames read from video")
 
         report(40, "Computing metrics...")
-        results = compute_metrics(
-            pose_frames, height_cm, effective_fps, video_file=video_path.name
-        )
+        with timer.step("metrics"):
+            results = compute_metrics(
+                pose_frames, height_cm, effective_fps, video_file=video_path.name
+            )
 
-        # Single choke point: decide whether this run's data is trustworthy
-        # enough to report/coach on BEFORE any surface (annotated video,
-        # dashboard PNG, results_json that the web report and Pro PDF both
-        # read) is generated. See backend/confidence_gate.py.
-        gate, results = apply_confidence_gate(results)
+            # Single choke point: decide whether this run's data is trustworthy
+            # enough to report/coach on BEFORE any surface (annotated video,
+            # dashboard PNG, results_json that the web report and Pro PDF both
+            # read) is generated. See backend/confidence_gate.py.
+            gate, results = apply_confidence_gate(results)
         results_from_json = results
 
         report(50, "Generating annotated video...")
@@ -203,34 +215,36 @@ def run_analysis(
         # GAIT_TARGET_FPS is set — frame_cache only has the kept frames.
         out_fps = _sanitize_fps_for_writer(effective_fps)
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        writer = cv2.VideoWriter(
-            annotated_video_path, fourcc, out_fps, (out_w, out_h)
-        )
-        for i, jpeg_bytes in enumerate(frame_cache):
-            frame = cv2.imdecode(
-                np.frombuffer(jpeg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR
+        with timer.step("annotate"):
+            writer = cv2.VideoWriter(
+                annotated_video_path, fourcc, out_fps, (out_w, out_h)
             )
-            img = annotate_single_frame(
-                frame, i, pose_by_idx, results_from_json, frame_flags,
-                suppress_metrics_panel=gate.hard_fail,
-            )
-            if img is not None:
-                writer.write(img)
-        frame_cache.clear()
-        writer.release()
+            for i, jpeg_bytes in enumerate(frame_cache):
+                frame = cv2.imdecode(
+                    np.frombuffer(jpeg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR
+                )
+                img = annotate_single_frame(
+                    frame, i, pose_by_idx, results_from_json, frame_flags,
+                    suppress_metrics_panel=gate.hard_fail,
+                )
+                if img is not None:
+                    writer.write(img)
+            frame_cache.clear()
+            writer.release()
 
         fd_h264, h264_path = tempfile.mkstemp(suffix=".mp4", prefix="gait_annotated_h264_")
         os.close(fd_h264)
         temp_paths.append(h264_path)
-        subprocess.run(
-            [
-                "ffmpeg", "-y", "-i", annotated_video_path,
-                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                h264_path,
-            ],
-            check=True,
-            capture_output=True,
-        )
+        with timer.step("encode"):
+            subprocess.run(
+                [
+                    "ffmpeg", "-y", "-i", annotated_video_path,
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                    h264_path,
+                ],
+                check=True,
+                capture_output=True,
+            )
         annotated_video_path = h264_path
 
         dashboard_path = None
@@ -238,14 +252,15 @@ def run_analysis(
             report(70, "Skipping dashboard (low-confidence result)...")
         else:
             report(70, "Building dashboard...")
-            fig = create_dashboard(results_from_json)
-            fd_d, dashboard_path = tempfile.mkstemp(
-                suffix=".png", prefix="gait_dashboard_"
-            )
-            os.close(fd_d)
-            temp_paths.append(dashboard_path)
-            fig.savefig(dashboard_path, dpi=150)
-            plt.close(fig)
+            with timer.step("dashboard"):
+                fig = create_dashboard(results_from_json)
+                fd_d, dashboard_path = tempfile.mkstemp(
+                    suffix=".png", prefix="gait_dashboard_"
+                )
+                os.close(fd_d)
+                temp_paths.append(dashboard_path)
+                fig.savefig(dashboard_path, dpi=150)
+                plt.close(fig)
 
         if truncated and results_from_json.get("meta"):
             results_from_json["meta"]["truncated_frames"] = max_frames

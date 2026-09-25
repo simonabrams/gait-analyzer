@@ -25,10 +25,11 @@ import numpy as np
 from backend.job_runner import CHUNK_SIZE, _resize_and_letterbox, _sanitize_fps_for_writer
 from backend.pose_extractor import extract_poses
 from backend.rear_metrics import compute_rear_metrics
+from backend.step_timer import StepTimer
 from backend.visualizer import annotate_rear_frame
 
 
-def run_rear_analysis(video_path, max_frames=None, max_width=None, target_fps=None):
+def run_rear_analysis(video_path, max_frames=None, max_width=None, target_fps=None, timer=None):
     """Returns {"rear_view": dict, "annotated_video_path": str, "temp_paths": list[str],
     "frames_used": int, "truncated": bool}.
 
@@ -38,6 +39,7 @@ def run_rear_analysis(video_path, max_frames=None, max_width=None, target_fps=No
     """
     video_path = Path(video_path)
     temp_paths = []
+    timer = timer or StepTimer()
     try:
         cap = cv2.VideoCapture(str(video_path))
         if not cap.isOpened():
@@ -62,43 +64,52 @@ def run_rear_analysis(video_path, max_frames=None, max_width=None, target_fps=No
 
             while True:
                 chunk, chunk_timestamps = [], []
-                for _ in range(CHUNK_SIZE):
-                    if max_frames and max_frames > 0 and frames_used >= max_frames:
-                        truncated = True
-                        break
-                    exhausted = False
-                    for _ in range(frame_skip - 1):
-                        if not cap.read()[0]:
-                            exhausted = True
+                with timer.step("decode"):
+                    for _ in range(CHUNK_SIZE):
+                        if max_frames and max_frames > 0 and frames_used >= max_frames:
+                            truncated = True
                             break
-                    if exhausted:
-                        break
-                    ts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
-                    frame = _resize_and_letterbox(frame, max_width)
-                    if out_w is None:
-                        out_h, out_w = frame.shape[0], frame.shape[1]
-                    _, enc = cv2.imencode(".jpg", frame, _JPEG_PARAMS)
-                    frame_cache.append(bytes(enc))
-                    chunk.append(frame)
-                    chunk_timestamps.append(ts_ms)
-                    frames_used += 1
+                        exhausted = False
+                        for _ in range(frame_skip - 1):
+                            if not cap.read()[0]:
+                                exhausted = True
+                                break
+                        if exhausted:
+                            break
+                        ts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
+                        ret, frame = cap.read()
+                        if not ret:
+                            break
+                        frame = _resize_and_letterbox(frame, max_width)
+                        if out_w is None:
+                            out_h, out_w = frame.shape[0], frame.shape[1]
+                        _, enc = cv2.imencode(".jpg", frame, _JPEG_PARAMS)
+                        frame_cache.append(bytes(enc))
+                        chunk.append(frame)
+                        chunk_timestamps.append(ts_ms)
+                        frames_used += 1
                 if not chunk:
                     break
                 start_idx = frames_used - len(chunk)
-                pose_frames.extend(
-                    extract_poses(chunk, start_frame_idx=start_idx, timestamps_ms=chunk_timestamps)
-                )
+                with timer.step("pose"):
+                    pose_frames.extend(
+                        extract_poses(chunk, start_frame_idx=start_idx, timestamps_ms=chunk_timestamps)
+                    )
                 del chunk
         finally:
             cap.release()
 
+        timer.info.update(
+            source_fps=float(fps),
+            effective_fps=float(effective_fps),
+            frames_used=frames_used,
+            truncated=truncated,
+        )
         if not pose_frames:
             raise RuntimeError("No frames read from video")
 
-        rear_view = compute_rear_metrics(pose_frames, effective_fps, video_file=video_path.name)
+        with timer.step("metrics"):
+            rear_view = compute_rear_metrics(pose_frames, effective_fps, video_file=video_path.name)
 
         pose_by_idx = {p["frame_idx"]: p for p in pose_frames}
         fd_v, annotated_video_path = tempfile.mkstemp(suffix=".mp4", prefix="gait_rear_annotated_")
@@ -106,27 +117,29 @@ def run_rear_analysis(video_path, max_frames=None, max_width=None, target_fps=No
         temp_paths.append(annotated_video_path)
         out_fps = _sanitize_fps_for_writer(effective_fps)
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        writer = cv2.VideoWriter(annotated_video_path, fourcc, out_fps, (out_w, out_h))
-        for i, jpeg_bytes in enumerate(frame_cache):
-            frame = cv2.imdecode(np.frombuffer(jpeg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
-            img = annotate_rear_frame(frame, i, pose_by_idx)
-            if img is not None:
-                writer.write(img)
-        frame_cache.clear()
-        writer.release()
+        with timer.step("annotate"):
+            writer = cv2.VideoWriter(annotated_video_path, fourcc, out_fps, (out_w, out_h))
+            for i, jpeg_bytes in enumerate(frame_cache):
+                frame = cv2.imdecode(np.frombuffer(jpeg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
+                img = annotate_rear_frame(frame, i, pose_by_idx)
+                if img is not None:
+                    writer.write(img)
+            frame_cache.clear()
+            writer.release()
 
         fd_h264, h264_path = tempfile.mkstemp(suffix=".mp4", prefix="gait_rear_annotated_h264_")
         os.close(fd_h264)
         temp_paths.append(h264_path)
-        subprocess.run(
-            [
-                "ffmpeg", "-y", "-i", annotated_video_path,
-                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                h264_path,
-            ],
-            check=True,
-            capture_output=True,
-        )
+        with timer.step("encode"):
+            subprocess.run(
+                [
+                    "ffmpeg", "-y", "-i", annotated_video_path,
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                    h264_path,
+                ],
+                check=True,
+                capture_output=True,
+            )
         annotated_video_path = h264_path
 
         if truncated:
