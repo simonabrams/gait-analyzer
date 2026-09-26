@@ -292,7 +292,7 @@
     },
 
     "knee_valgus_metric": {
-      "description": "Frontal-plane knee valgus (+) / varus (-) in degrees, initial contact through mid-stance. Single-camera 2D error is roughly +/-19 deg vs. motion capture: a pattern indicator only.",
+      "description": "Frontal-plane knee valgus (+) / varus (-) in degrees, initial contact through mid-stance. Single-camera 2D knee angles can differ from motion capture by 20+ deg: a pattern indicator only. Shown as knee alignment. Rows stored before Sep 2026 carry error_margin_deg 19 (unsourced, since removed).",
       "oneOf": [
         {
           "allOf": [

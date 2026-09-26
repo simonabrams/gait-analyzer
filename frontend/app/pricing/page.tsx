@@ -37,8 +37,8 @@ export default function PricingPage() {
         <p className="text-primary text-xs font-semibold tracking-[0.2em] uppercase mb-3">Pricing</p>
         <h1 className="text-4xl font-bold text-white mb-4">Simple, honest pricing</h1>
         <p className="text-gray-400 max-w-xl mx-auto">
-          Your first gait analysis is free. Upgrade to Pro for unlimited scans and progress
-          tracking over time.
+          Your first gait analysis is free, including the optional rear view. Upgrade to Pro
+          for unlimited scans and progress tracking over time.
         </p>
       </div>
 
@@ -51,7 +51,8 @@ export default function PricingPage() {
           description="Try Runlens with one full analysis, on us."
           features={[
             "1 gait analysis",
-            "Annotated video + dashboard",
+            "Annotated video + stride charts",
+            "Optional rear-view analysis",
             "Personalized drill recommendations",
           ]}
           ctaLabel="Get started"
@@ -67,6 +68,7 @@ export default function PricingPage() {
           description="Unlimited scans, billed monthly."
           features={[
             "Unlimited gait analyses",
+            "Optional rear-view analysis on every run",
             "Progress tracking over time",
             "Run comparison view",
             "Branded PDF report export",

@@ -68,7 +68,7 @@
     "meta": {
       "metrics_version": 3,
       "video_file": "rear.mp4",
-      "analyzed_at": "2026-09-25T23:30:06.478180+00:00",
+      "analyzed_at": "2026-09-26T18:46:21.755430+00:00",
       "fps": 30.0,
       "num_frames": 330,
       "cycle_normalisation": "percent_gait_cycle",
@@ -109,12 +109,12 @@
           ],
           "cycles_used": 14,
           "ci95_deg": 0.0,
-          "error_margin_deg": 19.0,
+          "error_margin_deg": null,
           "confidence": {
             "score": 0.9,
             "tier": "moderate"
           },
-          "disclaimer": "Whether your knee tracks inward or outward of the hip-to-ankle line during the first half of stance. Knee angles from a single camera can be off by roughly \u00b119\u00b0 vs. lab-grade motion capture, so treat this as a pattern, not a precise angle. Best used to spot side-to-side differences and changes between sessions."
+          "disclaimer": "Whether your knee tracks inward or outward of the hip-to-ankle line early in stance. Knee angles from a single camera can differ a lot from lab measurements (studies report 20\u00b0 or more), so treat this as a pattern, not a precise angle. Best used to spot side-to-side differences and changes between sessions."
         },
         "step_width": {
           "available": true,
@@ -186,12 +186,12 @@
           ],
           "cycles_used": 15,
           "ci95_deg": 0.0,
-          "error_margin_deg": 19.0,
+          "error_margin_deg": null,
           "confidence": {
             "score": 0.9,
             "tier": "moderate"
           },
-          "disclaimer": "Whether your knee tracks inward or outward of the hip-to-ankle line during the first half of stance. Knee angles from a single camera can be off by roughly \u00b119\u00b0 vs. lab-grade motion capture, so treat this as a pattern, not a precise angle. Best used to spot side-to-side differences and changes between sessions."
+          "disclaimer": "Whether your knee tracks inward or outward of the hip-to-ankle line early in stance. Knee angles from a single camera can differ a lot from lab measurements (studies report 20\u00b0 or more), so treat this as a pattern, not a precise angle. Best used to spot side-to-side differences and changes between sessions."
         },
         "step_width": {
           "available": true,
