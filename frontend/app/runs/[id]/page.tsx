@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   try {
     run = await getRun(id);
   } catch {
-    return { title: "Gait Analyzer" };
+    return { title: "Run Report" };
   }
   const summary = run.results?.summary;
   const desc =
@@ -221,7 +221,7 @@ export default async function RunResultPage({ params, searchParams }: Props) {
               for why rear patterns don't get an equivalent card here). */}
           <div className="space-y-4">
             <div>
-              <SectionEyebrow label="AI Analysis" />
+              <SectionEyebrow label="Focus Areas" />
               <h2 className="text-xl font-semibold text-white mt-1">What to Work On</h2>
             </div>
             <WhatToWorkOn flags={flags} strides={run.results?.strides as Array<Record<string, unknown>> | undefined} />
@@ -275,7 +275,7 @@ export default async function RunResultPage({ params, searchParams }: Props) {
                   icon: "📐",
                   title: "Film from the side",
                   detail:
-                    "A direct side-on view is essential — front or back angles make it very hard to track stride patterns.",
+                    "Your main video needs a side-on view — front or back angles can't show stride, knee drive or lean. Rear-view clips go in the separate rear-view slot.",
                 },
                 {
                   icon: "📏",

@@ -203,8 +203,8 @@ def test_short_clip_is_low_confidence_but_reported():
 def test_valgus_is_coarse_flagged_with_its_error_margin_and_disclaimer():
     obj = _run(valgus_left=10.0)["legs"]["left"]["knee_valgus"]
     assert obj["value_deg"] % 5 == 0
-    assert obj["error_margin_deg"] == 19.0
-    assert "±19°" in obj["disclaimer"]
+    assert obj["error_margin_deg"] is None
+    assert "pattern, not a precise angle" in obj["disclaimer"]
     assert obj["confidence"]["tier"] in ("low", "moderate")
 
 

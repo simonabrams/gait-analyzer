@@ -102,12 +102,31 @@ function formatValue(metric: Extract<RearMetric, { available: true }>): string {
   return `${v > 0 ? "+" : ""}${v}°`;
 }
 
-function MetricRow({ label, metric }: { label: string; metric: RearMetric }) {
+/** Tooltip copy for the metrics this page shows. The backend also stores a
+ * `disclaimer` with each result, but that's frozen at analysis time — runs
+ * analysed before Sep 2026 still carry an unsourced "±19°" knee figure — so
+ * current wording lives here and the stored text is only a fallback. Keep in
+ * step with backend/rear_confidence.py DISCLAIMERS. */
+const SESSION_TO_SESSION = "Best used to spot side-to-side differences and changes between sessions.";
+const TOOLTIPS: Record<string, string> = {
+  knee_valgus:
+    "Whether your knee tracks inward or outward of the hip-to-ankle line early in stance. " +
+    "Knee angles from a single camera can differ a lot from lab measurements (studies report " +
+    "20° or more), so treat this as a pattern, not a precise angle. " + SESSION_TO_SESSION,
+  step_width:
+    "Where your foot lands relative to the middle of your body, as a share of your hip width. " +
+    "Below zero means the foot crosses the midline. " + SESSION_TO_SESSION,
+  symmetry:
+    "Compares your left and right legs on knee alignment and step width, so it carries their " +
+    "uncertainty too. " + SESSION_TO_SESSION,
+};
+
+function MetricRow({ label, metricKey, metric }: { label: string; metricKey: string; metric: RearMetric }) {
   return (
     <div className="flex items-start justify-between gap-3 py-2.5 border-b border-white/5 last:border-b-0">
       <div className="flex items-center pt-0.5">
         <span className="text-sm text-gray-300">{label}</span>
-        {metric.available && <MetricTooltip content={metric.disclaimer} />}
+        {metric.available && <MetricTooltip content={TOOLTIPS[metricKey] ?? metric.disclaimer} />}
       </div>
       {metric.available ? (
         <div className="text-right">
@@ -131,8 +150,8 @@ function LegCard({ title, leg }: { title: string; leg: RearLeg }) {
   return (
     <div className="bg-secondary border border-white/10 rounded-xl p-5">
       <p className="font-mono text-[11px] tracking-[0.12em] text-primary uppercase mb-1">{title}</p>
-      <MetricRow label="Knee alignment" metric={leg.knee_valgus} />
-      {leg.step_width && <MetricRow label="Step width" metric={leg.step_width} />}
+      <MetricRow label="Knee alignment" metricKey="knee_valgus" metric={leg.knee_valgus} />
+      {leg.step_width && <MetricRow label="Step width" metricKey="step_width" metric={leg.step_width} />}
     </div>
   );
 }
@@ -155,7 +174,7 @@ function SymmetryCard({ symmetry }: { symmetry: RearSymmetry }) {
           <p className="font-mono text-[11px] tracking-[0.12em] text-primary uppercase">
             Left/right balance
           </p>
-          <MetricTooltip content={symmetry.disclaimer} />
+          <MetricTooltip content={TOOLTIPS.symmetry} />
         </div>
         <ReliabilityBadge tier={symmetry.confidence.tier} />
       </div>

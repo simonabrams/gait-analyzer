@@ -6,11 +6,11 @@ import TechAccordion from "@/components/TechAccordion";
 export const metadata: Metadata = {
   title: "About",
   description:
-    "Learn how Runlens uses computer vision to analyze your running form — cadence, bounce, knee drive, and more. No wearables or lab required.",
+    "Learn how Runlens uses computer vision to analyze your running form — cadence, bounce, knee drive, and left/right balance from an optional rear view. No wearables or lab required.",
   openGraph: {
     title: "About — Runlens",
     description:
-      "Learn how Runlens uses computer vision to analyze your running form — cadence, bounce, knee drive, and more. No wearables or lab required.",
+      "Learn how Runlens uses computer vision to analyze your running form — cadence, bounce, knee drive, and left/right balance from an optional rear view. No wearables or lab required.",
   },
 };
 
@@ -19,7 +19,10 @@ const METRICS = [
   { metric: "Bounce", target: "< 10 cm", meaning: "Up-and-down movement while running" },
   { metric: "Knee Drive", target: "> 15°", meaning: "Shock absorption at impact" },
   { metric: "Trunk lean", target: "< 15°", meaning: "Forward body angle" },
-  { metric: "Overstriding", target: "< 10 cm ahead", meaning: "Foot landing vs. hips" },
+  { metric: "Foot strike", target: "< 10 cm ahead", meaning: "How far ahead of your hips your foot lands" },
+  { metric: "Knee alignment", target: "No target", meaning: "Rear view: whether each knee tracks inward or outward" },
+  { metric: "Step width", target: "No target", meaning: "Rear view: where each foot lands vs. your midline" },
+  { metric: "Left/right balance", target: "No target", meaning: "Rear view: how closely your two legs match" },
 ];
 
 export default function AboutPage() {
@@ -58,8 +61,9 @@ export default function AboutPage() {
             </p>
             <h2 className="text-2xl font-bold text-white mb-4">What is Runlens?</h2>
             <p className="text-gray-300 leading-relaxed">
-              Upload a short video from the side, and you get back clear metrics and visual
-              feedback — cadence, bounce, knee drive, and more. I built it because I wanted to learn how I could improve my form using a lens (get it?) outside of the numbers on my Apple Watch and iPhone.
+              Upload a short video from the side (and, if you like, a second one from behind),
+              and you get back clear metrics and visual feedback — cadence, bounce, knee drive,
+              left/right balance and more. I built it because I wanted to learn how I could improve my form using a lens (get it?) outside of the numbers on my Apple Watch and iPhone.
             </p>
           </div>
           <div
@@ -97,6 +101,15 @@ export default function AboutPage() {
             for running — so you get numbers and flags that are easy to act on.
           </p>
           <p className="text-gray-300 leading-relaxed">
+            Add a clip filmed from directly behind and we analyse it separately (it isn&apos;t
+            synced with the side video) to show how each knee tracks and where each foot lands
+            relative to your midline, and how closely your left and right legs match. From
+            behind, a single camera can only estimate these roughly, so we show them as patterns
+            and left/right comparisons, not precise angles. Some things are harder to see than
+            you&apos;d think: phone video can&apos;t yet measure hip drop reliably, so we
+            don&apos;t report it.
+          </p>
+          <p className="text-gray-300 leading-relaxed">
             Please be aware that results might vary from what you get on your wearables or fitness trackers; these devices use onboard accelerometers to analyze your motion; Runlens uses computer vision and the accuracy will be affected by things like motion blur, poor lighting and other environmental factors. As such, our results are best used as directional insights and trends, not clinical measurements.
           </p>
           <p className="text-gray-300 leading-relaxed">One final note: a running coach told me that if her runners don&apos;t have any issues with pain or injury while running, then she doesn&apos;t bother to correct their form. Human bodies are all different and they work the way they work, so if that&apos;s you, then you might not need Runlens. But, if you&apos;re curious about your form, and want some quick insights, then Runlens might be the tool you&apos;re looking for. Either way, happy running! 🏃</p>
@@ -120,8 +133,8 @@ export default function AboutPage() {
                 body: "Place your camera at a strict 90° angle to your direction of travel. Even a slight diagonal angle throws off joint angle and stride calculations.",
               },
               {
-                title: "Use 60 fps or higher",
-                body: "Higher frame rates reduce motion blur and give the pose tracker more frames to work with. 30 fps is the minimum; 60 fps or 120 fps produces noticeably better results.",
+                title: "Use 60 fps if you can",
+                body: "Higher frame rates reduce motion blur and give the pose tracker more frames to work with, especially for the rear view. 30 fps works fine for the side view.",
               },
               {
                 title: "Keep the camera level and still",
@@ -138,6 +151,14 @@ export default function AboutPage() {
               {
                 title: "Wear fitted clothing",
                 body: "Loose or baggy clothes obscure joint positions. Fitted running kit gives the pose model a much clearer view of your hips, knees, and ankles.",
+              },
+              {
+                title: "Record at 1080p, not 4K",
+                body: "Uploads are limited to 100 MB. A 15-second clip at 1080p stays well under that, uploads faster, and gives the pose tracker all the detail it needs.",
+              },
+              {
+                title: "Adding a rear view",
+                body: "Film from directly behind, 2–3 m back, with the camera at hip height and level. A treadmill works best — running away from the camera makes you shrink in the frame.",
               },
               {
                 title: "Keep clips short",
@@ -183,7 +204,9 @@ export default function AboutPage() {
                     className={`border-b border-white/5 ${i % 2 === 0 ? "" : "bg-white/[0.02]"}`}
                   >
                     <td className="px-5 py-3 text-white font-medium">{row.metric}</td>
-                    <td className="px-5 py-3 text-primary font-mono">{row.target}</td>
+                    <td className={`px-5 py-3 font-mono ${row.target === "No target" ? "text-gray-500" : "text-primary"}`}>
+                      {row.target}
+                    </td>
                     <td className="px-5 py-3 text-gray-400">{row.meaning}</td>
                   </tr>
                 ))}

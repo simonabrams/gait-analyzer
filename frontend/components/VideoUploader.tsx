@@ -350,9 +350,14 @@ export default function VideoUploader({
               {rearFile ? (
                 <p className="text-white text-sm">{rearFile.name}</p>
               ) : (
-                <p className="text-gray-300 text-xs font-medium">
-                  {isRearDragActive ? "Drop the video here" : "Drag and drop a rear-view clip (optional)"}
-                </p>
+                <>
+                  <p className="text-gray-300 text-xs font-medium">
+                    {isRearDragActive ? "Drop the video here" : "Drag and drop a rear-view clip (optional)"}
+                  </p>
+                  <p className="text-gray-500 text-[11px] mt-1">
+                    Filmed from directly behind, camera at hip height, whole body in frame
+                  </p>
+                </>
               )}
             </div>
             {rearFileRejection && (
@@ -382,6 +387,11 @@ export default function VideoUploader({
             <span className="text-gray-500 text-xs font-normal">(optional)</span>
           </button>
         )
+      )}
+      {!isActive && !showRearDropzone && (
+        <p className="-mt-2 text-center text-[11px] text-gray-500">
+          Adds knee alignment, step width and left/right balance
+        </p>
       )}
 
       <div>
