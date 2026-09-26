@@ -93,7 +93,7 @@ def test_stance_and_midstance_are_reported_as_percent_of_cycle():
     assert 30 <= leg["stance_pct"] <= 55
     assert leg["midstance_pct"] == pytest.approx(leg["stance_pct"] / 2, abs=3)
     # hip drop and step width span all of stance; knee alignment its first 60%.
-    assert leg["hip_drop"]["window_pct"] == [0.0, leg["stance_pct"]]
+    assert leg["experimental"]["hip_drop"]["window_pct"] == [0.0, leg["stance_pct"]]
     assert leg["step_width"]["window_pct"] == [0.0, leg["stance_pct"]]
     assert leg["knee_valgus"]["window_pct"][1] == pytest.approx(leg["stance_pct"] * 0.6, abs=0.2)
     assert leg["experimental"]["pronation"]["window_pct"] == [0.0, leg["midstance_pct"]]
@@ -171,7 +171,7 @@ def test_left_right_ordering_that_is_a_coin_flip_reports_nothing():
     rv = rm.compute_rear_metrics(mixed, FPS)
     assert rv["status"] == "insufficient_data"
     assert rv["confidence_gate"]["reason"] == "unreliable_left_right"
-    assert not rv["legs"]["left"]["hip_drop"]["available"]
+    assert not rv["legs"]["left"]["knee_valgus"]["available"]
 
 
 # ---- Never blocks: insufficient / empty data -----------------------------------
@@ -195,7 +195,7 @@ def test_no_pose_or_no_frames_returns_a_well_formed_empty_rear_view():
 def test_short_clip_is_low_confidence_but_reported():
     rv = _run(n_frames=CYCLE_FRAMES * 7 + 5)
     assert rv["status"] == "low_confidence"
-    assert rv["legs"]["left"]["hip_drop"]["available"]
+    assert rv["legs"]["left"]["knee_valgus"]["available"]
 
 
 
@@ -217,13 +217,13 @@ def test_implausible_metric_is_dropped_alone_not_the_whole_report():
     rv = _run(pronation_left=50.0, pronation_right=50.0)
     # atan of a huge heel offset is still a finite angle; it must not survive the bound.
     assert rv["legs"]["left"]["experimental"]["pronation"] == {"available": False, "reason": "implausible"}
-    assert rv["legs"]["left"]["hip_drop"]["available"]
+    assert rv["legs"]["left"]["knee_valgus"]["available"]
     assert rv["status"] in ("ok", "low_confidence")
 
 
 def test_low_visibility_lowers_confidence_scores():
-    good = _run()["legs"]["left"]["hip_drop"]["confidence"]["score"]
-    poor = _run(visibility=0.6)["legs"]["left"]["hip_drop"]["confidence"]["score"]
+    good = _run()["legs"]["left"]["knee_valgus"]["confidence"]["score"]
+    poor = _run(visibility=0.6)["legs"]["left"]["knee_valgus"]["confidence"]["score"]
     assert poor < good
 
 
@@ -247,8 +247,8 @@ def test_hip_drop_is_measured_from_the_leg_s_own_foot_strike():
     assert _val(rv, "left", "hip_drop") == pytest.approx(4, abs=1)
     # Smoothing softens a sharp synthetic peak by ~5%; real pelvic drop is broader.
     assert _val(rv, "right", "hip_drop") == pytest.approx(12, abs=1.5)
-    assert rv["legs"]["right"]["hip_drop"]["pattern"] == "pronounced"
-    assert rv["legs"]["left"]["hip_drop"]["pattern"] == "typical"
+    assert _obj(rv, "right", "hip_drop")["pattern"] == "pronounced"
+    assert _obj(rv, "left", "hip_drop")["pattern"] == "typical"
 
 
 def test_smoothing_keeps_noisy_landmarks_usable():
@@ -288,9 +288,10 @@ def test_step_width_patterns():
     assert _val(_run(foot_offset_pct=-20.0), "left", "knee_valgus") == _val(_run(), "left", "knee_valgus")
 
 
-def test_pronation_is_experimental_and_out_of_symmetry():
+def test_pronation_and_hip_drop_are_experimental_and_out_of_symmetry():
     rv = _run()
-    assert "pronation" not in rv["legs"]["left"]
-    assert rv["legs"]["left"]["experimental"]["pronation"]["available"]
-    assert set(rv["symmetry"]["components"]) == {"hip_drop", "knee_valgus", "step_width"}
+    for metric in ("pronation", "hip_drop"):
+        assert metric not in rv["legs"]["left"]
+        assert rv["legs"]["left"]["experimental"][metric]["available"]
+    assert set(rv["symmetry"]["components"]) == {"knee_valgus", "step_width"}
     assert set(rv["curves"]["left"]) == {"hip_drop_deg", "knee_valgus_deg"}

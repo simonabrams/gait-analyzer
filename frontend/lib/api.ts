@@ -79,13 +79,14 @@ export type RearMetric =
   | { available: false; reason: string };
 
 /** metrics_version 1 rows (before step width) carry `pronation` at the top
- * level and no `step_width`; version 2 moves pronation under `experimental`,
- * which the UI doesn't show. */
+ * level and no `step_width`; version 2 moves pronation under `experimental`;
+ * version 3 moves `hip_drop` there too. The UI shows neither (see
+ * lib/rearBalance.ts). */
 export interface RearLeg {
   cycles_detected: number;
   cycles_usable: number;
   reportable: boolean;
-  hip_drop: RearMetric;
+  hip_drop?: RearMetric;
   knee_valgus: RearMetric;
   step_width?: RearMetric;
   pronation?: RearMetric;

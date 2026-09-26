@@ -1,16 +1,17 @@
 import type { RearLeg, RearMetric, RearMetricTier, RearSymmetry, RearView } from "@/lib/api";
 import MetricTooltip from "@/components/MetricTooltip";
+import { displayedBalance } from "@/lib/rearBalance";
 
-/** Renders results.rear_view — hip drop / knee alignment / step width and
- * left/right balance from an optional rear-view video (see
- * backend/rear_metrics.py, backend/rear_confidence.py). A separate component
- * from MetricCards rather than an extension of it: MetricCards is hardcoded
- * to exactly 3 flat side-view metrics, not shaped for per-leg/tiered data.
+/** Renders results.rear_view — knee alignment / step width and left/right
+ * balance from an optional rear-view video (see backend/rear_metrics.py,
+ * backend/rear_confidence.py). A separate component from MetricCards rather
+ * than an extension of it: MetricCards is hardcoded to exactly 3 flat
+ * side-view metrics, not shaped for per-leg/tiered data.
  *
- * Older rear results (metrics_version 1) have pronation and no step width;
- * pronation is no longer shown for any run (too short a line to track from a
- * phone camera, and not linked to injury risk), and step width only appears
- * when present. */
+ * Hip drop and pronation are never shown, for any run, even ones analysed
+ * before they moved to `experimental` (see lib/rearBalance.ts for why), and
+ * the balance score is rebuilt without them. Step width only appears when
+ * present (metrics_version 2+). */
 export default function RearViewSection({ rearView }: { rearView: RearView }) {
   if (rearView.status === "insufficient_data") {
     return (
@@ -130,7 +131,6 @@ function LegCard({ title, leg }: { title: string; leg: RearLeg }) {
   return (
     <div className="bg-secondary border border-white/10 rounded-xl p-5">
       <p className="font-mono text-[11px] tracking-[0.12em] text-primary uppercase mb-1">{title}</p>
-      <MetricRow label="Hip drop" metric={leg.hip_drop} />
       <MetricRow label="Knee alignment" metric={leg.knee_valgus} />
       {leg.step_width && <MetricRow label="Step width" metric={leg.step_width} />}
     </div>
@@ -138,7 +138,8 @@ function LegCard({ title, leg }: { title: string; leg: RearLeg }) {
 }
 
 function SymmetryCard({ symmetry }: { symmetry: RearSymmetry }) {
-  if (!symmetry.available) {
+  const balance = displayedBalance(symmetry);
+  if (!symmetry.available || !balance) {
     return (
       <div className="bg-secondary border border-white/10 rounded-xl p-5">
         <p className="text-sm text-gray-400">
@@ -159,10 +160,10 @@ function SymmetryCard({ symmetry }: { symmetry: RearSymmetry }) {
         <ReliabilityBadge tier={symmetry.confidence.tier} />
       </div>
       <div className="flex items-baseline gap-2 mt-2">
-        <span className="text-[28px] font-mono font-semibold text-white leading-none">{symmetry.score}</span>
+        <span className="text-[28px] font-mono font-semibold text-white leading-none">{balance.score}</span>
         <span className="text-gray-400 text-sm">/ 100</span>
       </div>
-      <p className="text-sm text-gray-300 mt-0.5">{patternLabel(symmetry.band)}</p>
+      <p className="text-sm text-gray-300 mt-0.5">{patternLabel(balance.band)}</p>
     </div>
   );
 }

@@ -83,8 +83,8 @@ export default function AddRearVideoControl({ runId }: { runId: string }) {
         </span>
       </div>
       <p className="text-xs text-gray-400 leading-relaxed">
-        A clip filmed from directly behind shows hip drop, knee alignment and step width,
-        patterns a side-on video can&apos;t see. It&apos;s analysed separately and never
+        A clip filmed from directly behind shows knee alignment, step width and left/right
+        balance, patterns a side-on video can&apos;t see. It&apos;s analysed separately and never
         changes the results above.
       </p>
 

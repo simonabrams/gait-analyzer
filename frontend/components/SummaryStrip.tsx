@@ -1,4 +1,5 @@
 import type { Flag, RearView } from "@/lib/api";
+import { displayedBalance } from "@/lib/rearBalance";
 import { findingFlags, formatFlagValue, humanFlagLabel, humanFlagTitle, sortBySeverity, statusForMetric } from "@/lib/gaitStatus";
 
 const TILE_METRICS = [
@@ -43,7 +44,8 @@ export default function SummaryStrip({ summary, flags, rearView }: SummaryStripP
     seen.add(f.metric);
     focusAreas.push(humanFlagLabel(f.metric));
   }
-  if (rearView?.symmetry?.available && rearView.symmetry.band !== "symmetric") {
+  const balance = displayedBalance(rearView?.symmetry);
+  if (balance && balance.band !== "symmetric") {
     focusAreas.push("left/right balance (rear view)");
   }
 
