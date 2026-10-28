@@ -295,3 +295,13 @@ def test_pronation_and_hip_drop_are_experimental_and_out_of_symmetry():
         assert rv["legs"]["left"]["experimental"][metric]["available"]
     assert set(rv["symmetry"]["components"]) == {"knee_valgus", "step_width"}
     assert set(rv["curves"]["left"]) == {"hip_drop_deg", "knee_valgus_deg"}
+
+
+# ---- Capture-quality signals for filming tips ------------------------------------------
+def test_camera_roll_and_size_change_are_recorded():
+    level = _run()
+    assert level["meta"]["camera_roll_deg"] == pytest.approx(0, abs=0.5)
+    assert level["meta"]["size_change_ratio"] == pytest.approx(1.0, abs=0.03)
+    assert _run(camera_roll_deg=5.0)["meta"]["camera_roll_deg"] == pytest.approx(5, abs=1)
+    away = _run(scale_end=0.7)
+    assert away["meta"]["size_change_ratio"] < 0.8

@@ -21,6 +21,7 @@ import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_SIZE_BYTES, rejectionMessage } from "@/l
 import { useRearVideoUpload } from "@/lib/useRearVideoUpload";
 import ConsentModal from "@/components/ConsentModal";
 import FileRejectionAlert from "@/components/FileRejectionAlert";
+import RearFilmingTips from "@/components/RearFilmingTips";
 import UpgradeModal from "@/components/UpgradeModal";
 import posthog from "posthog-js";
 
@@ -365,6 +366,9 @@ export default function VideoUploader({
                 <FileRejectionAlert message={rearFileRejection} />
               </div>
             )}
+            <div className="mt-2">
+              <RearFilmingTips />
+            </div>
             <button
               type="button"
               onClick={() => {

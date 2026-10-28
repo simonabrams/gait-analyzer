@@ -54,6 +54,7 @@ def make_rear_frames(
     camera_roll_deg=0.0,
     noise=0.0,
     seed=0,
+    scale_end=1.0,
 ):
     """Frames whose left-leg gait cycle repeats every CYCLE_FRAMES and whose
     right leg is half a cycle behind. `start_phase` shifts where in the cycle
@@ -62,7 +63,9 @@ def make_rear_frames(
     foot_offset_pct: where each foot lands, % of hip width from the pelvis
     midline (50 = straight under the hip joint, 0 = on the midline, negative =
     crossover). camera_roll_deg rotates the whole image (a tilted phone).
-    noise adds Gaussian landmark jitter (normalised units)."""
+    noise adds Gaussian landmark jitter (normalised units). scale_end shrinks
+    the runner linearly about the image centre to this size by the last frame
+    (running away from the camera)."""
     rng = random.Random(seed)
     frames = []
     for i in range(n_frames):
@@ -101,6 +104,9 @@ def make_rear_frames(
             # Pronation: heel displaced laterally (away from midline) relative to the ankle.
             lm[heel_i] = _lm(foot_x - medial * _HEEL_DROP * math.tan(math.radians(pron)), ankle_y + _HEEL_DROP, visibility)
 
+        if scale_end != 1.0:
+            k = 1.0 + (scale_end - 1.0) * i / max(1, n_frames - 1)
+            lm = [{**pt, "x": 0.5 + (pt["x"] - 0.5) * k, "y": 0.5 + (pt["y"] - 0.5) * k} for pt in lm]
         if camera_roll_deg:
             lm = [_rotate(pt, camera_roll_deg) for pt in lm]
         if noise:

@@ -10,6 +10,7 @@ import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_SIZE_BYTES, rejectionMessage } from "@/l
 import { useRearVideoUpload } from "@/lib/useRearVideoUpload";
 import ConsentModal from "@/components/ConsentModal";
 import FileRejectionAlert from "@/components/FileRejectionAlert";
+import RearFilmingTips from "@/components/RearFilmingTips";
 import UpgradeModal from "@/components/UpgradeModal";
 
 /** Lets the OWNER of a completed run attach an optional rear-view video after
@@ -87,6 +88,7 @@ export default function AddRearVideoControl({ runId }: { runId: string }) {
         balance, patterns a side-on video can&apos;t see. It&apos;s analysed separately and never
         changes the results above.
       </p>
+      <RearFilmingTips />
 
       {busy ? (
         <div className="space-y-2">

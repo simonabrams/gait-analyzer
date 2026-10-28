@@ -298,3 +298,48 @@ def symmetry_band(score: float) -> str:
     if score >= SYMMETRY_BAND_MILD_MIN:
         return "mild_asymmetry"
     return "notable_asymmetry"
+
+
+# --- Capture notes ("for next time" filming tips) ------------------------------
+# Never change a result: they only tell the runner how to film a better clip.
+# PROVISIONAL thresholds.
+CAPTURE_LOW_FPS = 50.0          # original upload fps below this -> suggest 60 fps
+CAPTURE_ROLL_DEG = 3.0          # |camera roll| above this -> suggest a level camera
+CAPTURE_SHRINK_RATIO = 0.85     # runner's size in frame, end vs start, below this
+
+
+def capture_notes(meta: dict, original_fps: float | None) -> list[dict]:
+    """Filming tips for a rear clip, from what the analysis noticed about the
+    footage: [{"code", "message"}], most useful first. `meta` is a rear_view
+    meta dict (camera_roll_deg / size_change_ratio from rear_metrics);
+    `original_fps` is the uploaded file's frame rate, before any frame
+    dropping (video_preprocessor.probe_source)."""
+    notes = []
+    shrink = meta.get("size_change_ratio")
+    if shrink is not None and shrink < CAPTURE_SHRINK_RATIO:
+        notes.append({
+            "code": "moving_away",
+            "message": (
+                "You got smaller in the frame as the clip went on, so you were probably "
+                "running away from the camera. A treadmill keeps you the same size and "
+                "gives a steadier read."
+            ),
+        })
+    if original_fps and original_fps < CAPTURE_LOW_FPS:
+        notes.append({
+            "code": "low_fps",
+            "message": (
+                f"This clip reached us at {round(original_fps)} fps. Filming at 60 fps "
+                "gives a sharper read of each stride (on iPhone: 1080p at 60 fps)."
+            ),
+        })
+    roll = meta.get("camera_roll_deg")
+    if roll is not None and abs(roll) > CAPTURE_ROLL_DEG:
+        notes.append({
+            "code": "camera_tilted",
+            "message": (
+                f"The camera looks tilted by about {round(abs(roll))}°. We correct for it, "
+                "but a level camera (use your phone's level) gives the cleanest read."
+            ),
+        })
+    return notes

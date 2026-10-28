@@ -13,13 +13,17 @@ import { displayedBalance } from "@/lib/rearBalance";
  * the balance score is rebuilt without them. Step width only appears when
  * present (metrics_version 2+). */
 export default function RearViewSection({ rearView }: { rearView: RearView }) {
+  const notes = rearView.meta?.capture_notes ?? [];
   if (rearView.status === "insufficient_data") {
     return (
-      <div className="bg-secondary border border-white/10 rounded-xl p-5">
-        <p className="text-sm text-gray-400">
-          {rearView.confidence_gate?.user_message ??
-            "We couldn't get a reliable read from the rear-view video."}
-        </p>
+      <div className="space-y-4">
+        <div className="bg-secondary border border-white/10 rounded-xl p-5">
+          <p className="text-sm text-gray-400">
+            {rearView.confidence_gate?.user_message ??
+              "We couldn't get a reliable read from the rear-view video."}
+          </p>
+        </div>
+        <CaptureNotes notes={notes} />
       </div>
     );
   }
@@ -41,6 +45,7 @@ export default function RearViewSection({ rearView }: { rearView: RearView }) {
         <LegCard title="Right Leg" leg={rearView.legs.right} />
       </div>
       {rearView.symmetry && <SymmetryCard symmetry={rearView.symmetry} />}
+      <CaptureNotes notes={notes} />
       <p className="text-xs text-gray-500 text-center">
         Rear-view patterns are rougher than the side-view numbers above. Use them to spot
         left/right differences and changes between sessions.
@@ -183,6 +188,28 @@ function SymmetryCard({ symmetry }: { symmetry: RearSymmetry }) {
         <span className="text-gray-400 text-sm">/ 100</span>
       </div>
       <p className="text-sm text-gray-300 mt-0.5">{patternLabel(balance.band)}</p>
+    </div>
+  );
+}
+
+/** "For your next rear-view clip" tips from what the analysis noticed about
+ * the footage (low frame rate, tilted camera, running away from the camera).
+ * Informational, not a warning: the results above already account for them. */
+function CaptureNotes({ notes }: { notes: { code: string; message: string }[] }) {
+  if (notes.length === 0) return null;
+  return (
+    <div className="rounded-xl border border-blue-700/30 bg-blue-950/30 px-5 py-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-blue-300 mb-2">
+        For your next rear-view clip
+      </p>
+      <ul className="space-y-1.5">
+        {notes.map((n) => (
+          <li key={n.code} className="text-sm text-blue-100/90 leading-relaxed flex gap-2">
+            <span aria-hidden className="text-blue-400">•</span>
+            <span>{n.message}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -114,3 +114,16 @@ def test_every_metric_has_a_disclaimer_and_knee_says_it_is_a_pattern():
     assert "pattern, not a precise angle" in rc.DISCLAIMERS["knee_valgus"]
     assert "±" not in rc.DISCLAIMERS["knee_valgus"]
     assert all("session" in d for d in rc.DISCLAIMERS.values())
+
+
+# ---- Capture notes -------------------------------------------------------------------------
+def test_capture_notes_only_flag_real_problems():
+    assert rc.capture_notes({"camera_roll_deg": 1.0, "size_change_ratio": 0.98}, 59.94) == []
+    assert rc.capture_notes({}, None) == []
+
+
+def test_capture_notes_cover_low_fps_tilt_and_running_away():
+    notes = rc.capture_notes({"camera_roll_deg": -4.4, "size_change_ratio": 0.7}, 29.97)
+    assert [n["code"] for n in notes] == ["moving_away", "low_fps", "camera_tilted"]
+    assert "30 fps" in notes[1]["message"]
+    assert "about 4°" in notes[2]["message"]
