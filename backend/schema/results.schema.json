@@ -99,6 +99,24 @@
           "properties": {
             "metrics_version": { "description": "Absent means 1 (hip drop at mid-stance, pronation as a main metric). 2: tilt-cancelled peak hip drop, peak knee alignment, step_width, pronation under experimental. 3: hip_drop also under experimental.", "enum": [1, 2, 3] },
             "tilt_offset_deg": { "type": "number", "description": "Median hip-line tilt over the clip (camera roll plus standing pelvic asymmetry). Hip drop already cancels it." },
+            "camera_roll_deg": { "type": "number", "description": "Median trunk angle from vertical over the clip: the camera's roll. Step width already corrects for it." },
+            "size_change_ratio": { "type": "number", "minimum": 0, "description": "Runner's torso length in frame, last fifth of the clip / first fifth. Well below 1 = running away from the camera." },
+            "original_fps": { "type": "number", "description": "Frame rate of the uploaded file, before any frame dropping." },
+            "truncated_frames": { "type": "integer", "description": "Set when the clip hit GAIT_MAX_FRAMES: the cap that applied." },
+            "frames_used": { "type": "integer", "description": "Set with truncated_frames: frames actually analysed." },
+            "capture_notes": {
+              "description": "Filming tips for next time (rear_confidence.capture_notes). Never change a result.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["code", "message"],
+                "properties": {
+                  "code": { "enum": ["moving_away", "low_fps", "camera_tilted"] },
+                  "message": { "type": "string" }
+                },
+                "additionalProperties": false
+              }
+            },
             "video_file": { "type": "string" },
             "analyzed_at": { "type": "string", "format": "date-time" },
             "fps": { "type": ["number", "null"] },
@@ -292,7 +310,7 @@
     },
 
     "knee_valgus_metric": {
-      "description": "Frontal-plane knee valgus (+) / varus (-) in degrees, initial contact through mid-stance. Single-camera 2D error is roughly +/-19 deg vs. motion capture: a pattern indicator only.",
+      "description": "Frontal-plane knee valgus (+) / varus (-) in degrees, initial contact through mid-stance. Single-camera 2D knee angles can differ from motion capture by 20+ deg: a pattern indicator only. Shown as knee alignment. Rows stored before Sep 2026 carry error_margin_deg 19 (unsourced, since removed).",
       "oneOf": [
         {
           "allOf": [

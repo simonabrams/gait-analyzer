@@ -57,8 +57,9 @@ export default function HomeClient() {
             Improve your form.
           </h1>
           <p className="text-lg text-gray-300 mb-10 max-w-xl mx-auto leading-relaxed">
-            Upload a short video and get instant, visual feedback on your running gait —
-            cadence, stride, posture, and more.
+            Upload a short video and get visual feedback on your running gait — cadence,
+            stride and posture from the side, plus knee alignment and foot placement from
+            behind if you add a rear view.
           </p>
           <div className="flex flex-wrap gap-4 justify-center mb-12">
             <Link
@@ -111,6 +112,9 @@ export default function HomeClient() {
             💡 Best results: film from the side, full body visible, 10–15 seconds of steady
             running — treadmill or outdoors both work
           </p>
+          <p className="mt-2 text-sm text-gray-500 text-center">
+            Adding a rear view? Film from directly behind at hip height — a treadmill works best.
+          </p>
           {hasRuns && (
             <p className="mt-3 text-center">
               <Link href="/runs" className="text-primary hover:underline text-sm">
@@ -132,9 +136,9 @@ export default function HomeClient() {
           {/* Mobile: vertical step list */}
           <div className="md:hidden space-y-4">
             {[
-              { n: 1, title: "Film your run", body: "10–15 sec from the side — treadmill or outdoors. Just keep the camera steady." },
+              { n: 1, title: "Film your run", body: "10–15 sec from the side — treadmill or outdoors. Optional: a second clip from directly behind." },
               { n: 2, title: "Upload your video", body: "Drop it in and tell us your height. That's all we need." },
-              { n: 3, title: "Get your analysis", body: "See cadence, stride, posture — and what to work on next." },
+              { n: 3, title: "Get your analysis", body: "See cadence, stride, posture — plus left/right balance if you added a rear view." },
             ].map(({ n, title, body }) => (
               <div key={n} className="flex gap-4 items-start bg-secondary rounded-xl p-5 border border-white/10">
                 <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-background font-bold text-sm shrink-0 mt-0.5">
@@ -172,7 +176,8 @@ export default function HomeClient() {
                 <div className="bg-black/70 backdrop-blur-sm rounded-xl p-4 border border-white/10">
                   <h3 className="font-semibold text-white text-base mb-1">Film your run</h3>
                   <p className="text-gray-300 text-sm leading-relaxed">
-                    10–15 sec from the side — treadmill or outdoors. Just keep the camera steady.
+                    10–15 sec from the side — treadmill or outdoors. Optional: a second clip from
+                    directly behind.
                   </p>
                 </div>
               </div>
@@ -204,7 +209,8 @@ export default function HomeClient() {
                 <div className="bg-black/70 backdrop-blur-sm rounded-xl p-4 border border-white/10">
                   <h3 className="font-semibold text-white text-base mb-1">Get your analysis</h3>
                   <p className="text-gray-300 text-sm leading-relaxed">
-                    See cadence, stride, posture — and what to work on next.
+                    See cadence, stride, posture — plus left/right balance if you added a rear
+                    view.
                   </p>
                 </div>
               </div>

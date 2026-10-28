@@ -23,6 +23,8 @@ from backend import worker as _worker
 from backend.analytics import capture as posthog_capture
 from backend.database import get_db_session
 from backend.models import Run, RunVideo, VideoViewType
+from backend import rear_confidence as rc
+from backend.pose_extractor import model_variant_from_env
 from backend.rear_job_runner import run_rear_analysis
 from backend.step_timer import StepTimer
 from backend.storage import download_file, rear_annotated_video_key, upload_file
@@ -124,8 +126,15 @@ def process_rear_video(self, run_id: str, rear_video_r2_key: str) -> None:
         out = run_rear_analysis(
             preprocessed_path, max_frames=max_frames, max_width=max_width, target_fps=target_fps,
             timer=timer,
+            # Rear-only model choice (see pose_extractor): "full" unless overridden.
+            model_variant=model_variant_from_env("GAIT_REAR_POSE_MODEL", "full"),
         )
         rear_view = out["rear_view"]
+        original_fps = (preprocess_meta or {}).get("original_fps")
+        if isinstance(rear_view.get("meta"), dict):
+            if original_fps:
+                rear_view["meta"]["original_fps"] = original_fps
+            rear_view["meta"]["capture_notes"] = rc.capture_notes(rear_view["meta"], original_fps)
 
         ann_key = rear_annotated_video_key(run_id)
         with timer.step("upload"):

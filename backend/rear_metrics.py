@@ -211,7 +211,7 @@ def compute_rear_metrics(pose_frames, fps, video_file=""):
 
     return {
         "status": gate.status,
-        "meta": _meta(video_file, fps, len(pose_frames), lr_consistency, swapped, view, sig["tilt"]),
+        "meta": _meta(video_file, fps, len(pose_frames), lr_consistency, swapped, view, sig),
         "confidence_gate": _gate_dict(gate),
         "legs": legs,
         "symmetry": symmetry,
@@ -222,7 +222,7 @@ def compute_rear_metrics(pose_frames, fps, video_file=""):
 # ---------------------------------------------------------------------------
 # Output scaffolding
 # ---------------------------------------------------------------------------
-def _meta(video_file, fps, num_frames, lr_consistency, swapped, view=None, tilt=None):
+def _meta(video_file, fps, num_frames, lr_consistency, swapped, view=None, sig=None):
     meta = {
         "metrics_version": METRICS_VERSION,
         "video_file": video_file,
@@ -237,13 +237,37 @@ def _meta(video_file, fps, num_frames, lr_consistency, swapped, view=None, tilt=
     }
     if view is not None:
         meta["view_check"] = view.as_dict()
-    tilts = [t for t in (tilt or []) if t is not None]
+    if sig is None:
+        return meta
+    tilts = [t for t in sig["tilt"] if t is not None]
     if tilts:
         # Median hip-line tilt over the clip: roughly camera roll plus any
-        # standing pelvic asymmetry. Hip drop already cancels it; recorded so a
-        # tilted-camera warning can use it.
+        # standing pelvic asymmetry. Hip drop already cancels it.
         meta["tilt_offset_deg"] = round(statistics.median(tilts), 1)
+    if sig.get("roll_known"):
+        # Median trunk angle from vertical: runners don't lean sideways on
+        # average, so this is the camera's roll. Step width already corrects
+        # for it; rear_confidence.capture_notes uses it for a "level the
+        # camera" tip.
+        meta["camera_roll_deg"] = round(sig["roll"], 1)
+    ratio = _size_change_ratio(sig.get("torso") or [])
+    if ratio is not None:
+        meta["size_change_ratio"] = round(ratio, 2)
     return meta
+
+
+def _size_change_ratio(torso):
+    """Median torso length (shoulders to hips, in frame) over the last fifth
+    of the clip divided by the first fifth. Well below 1 means the runner got
+    smaller in frame: running away from the camera rather than on a
+    treadmill. None when either end has too few readings."""
+    n = len(torso)
+    k = max(1, n // 5)
+    first = [t for t in torso[:k] if t is not None]
+    last = [t for t in torso[n - k:] if t is not None]
+    if len(first) < 5 or len(last) < 5:
+        return None
+    return statistics.median(last) / statistics.median(first)
 
 
 def _gate_dict(gate):
@@ -457,9 +481,23 @@ def foot_offset_pct(lm, leg, roll_deg=0.0):
     return -100.0 * _MEDIAL_DIR[leg] * lateral / hip_w
 
 
+def torso_length(lm):
+    """Distance from the hip midpoint to the shoulder midpoint, in normalised
+    image units: a stand-in for how big the runner is in frame."""
+    if not _visible(lm, LEFT_HIP, RIGHT_HIP, LEFT_SHOULDER, RIGHT_SHOULDER):
+        return None
+    hx = (lm[LEFT_HIP]["x"] + lm[RIGHT_HIP]["x"]) / 2.0
+    hy = (lm[LEFT_HIP]["y"] + lm[RIGHT_HIP]["y"]) / 2.0
+    sx = (lm[LEFT_SHOULDER]["x"] + lm[RIGHT_SHOULDER]["x"]) / 2.0
+    sy = (lm[LEFT_SHOULDER]["y"] + lm[RIGHT_SHOULDER]["y"]) / 2.0
+    return math.hypot(sx - hx, sy - hy)
+
+
 def _frame_signals(frames):
     trunk = [trunk_angle_deg(lm) if (lm := p.get("landmarks")) else None for p in frames]
-    roll = _median_or_none(trunk) or 0.0
+    median_trunk = _median_or_none(trunk)
+    roll = median_trunk or 0.0
+    torso = [torso_length(lm) if (lm := p.get("landmarks")) else None for p in frames]
     tilt = []
     pron, valg, step = ({"left": [], "right": []} for _ in range(3))
     for p in frames:
@@ -469,7 +507,10 @@ def _frame_signals(frames):
             pron[leg].append(pronation_deg(lm, leg) if lm else None)
             valg[leg].append(knee_valgus_deg(lm, leg) if lm else None)
             step[leg].append(foot_offset_pct(lm, leg, roll) if lm else None)
-    return {"tilt": tilt, "pronation": pron, "knee_valgus": valg, "step_width": step, "roll": roll}
+    return {
+        "tilt": tilt, "pronation": pron, "knee_valgus": valg, "step_width": step,
+        "roll": roll, "roll_known": median_trunk is not None, "torso": torso,
+    }
 
 
 def _smooth_landmarks(frames, fps):

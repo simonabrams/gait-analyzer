@@ -18,9 +18,12 @@ RIGHT_KNEE = 26
 LEFT_ANKLE = 27
 RIGHT_ANKLE = 28
 
-# Available pose landmarker model variants.
-# Set GAIT_POSE_MODEL=full for higher landmark accuracy at the cost of ~2× inference time.
-# Default: "lite" — good balance of speed and accuracy for most gait analyses.
+# Available pose landmarker model variants (same 33 landmarks, bigger networks).
+# Roughly: full ~2x and heavy ~4-5x lite's inference time per frame on CPU.
+# The side pipeline uses GAIT_POSE_MODEL (default "lite"); the rear pipeline
+# has its own GAIT_REAR_POSE_MODEL (default "full", see rear_worker), because
+# frontal-plane angles come from small sideways offsets that lite tracks
+# poorly and rear clips are short.
 _POSE_MODEL_URLS = {
     "lite": (
         "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
@@ -30,39 +33,52 @@ _POSE_MODEL_URLS = {
         "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
         "pose_landmarker_full/float16/latest/pose_landmarker_full.task"
     ),
+    "heavy": (
+        "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
+        "pose_landmarker_heavy/float16/latest/pose_landmarker_heavy.task"
+    ),
 }
 
 
+def model_variant_from_env(env_var: str = "GAIT_POSE_MODEL", default: str = "lite") -> str:
+    """The model variant named by `env_var`, or `default` if unset/unknown."""
+    variant = os.environ.get(env_var, default).lower().strip()
+    return variant if variant in _POSE_MODEL_URLS else default
+
+
 def _model_variant() -> str:
-    variant = os.environ.get("GAIT_POSE_MODEL", "lite").lower().strip()
-    return variant if variant in _POSE_MODEL_URLS else "lite"
+    return model_variant_from_env("GAIT_POSE_MODEL", "lite")
 
 
-def _model_cache_path():
-    variant = _model_variant()
+def _model_cache_path(variant: str):
     d = Path(os.environ.get("GAIT_ANALYZER_CACHE", Path(__file__).resolve().parent / ".pose_model"))
     d.mkdir(parents=True, exist_ok=True)
     return d / f"pose_landmarker_{variant}.task"
 
 
-def _ensure_model():
-    path = _model_cache_path()
+def _ensure_model(variant: str):
+    path = _model_cache_path(variant)
     if path.exists():
         return str(path)
-    url = _POSE_MODEL_URLS[_model_variant()]
+    url = _POSE_MODEL_URLS[variant]
+    # Download to a temp name then rename, so a failed or interrupted download
+    # never leaves a truncated .task file that every later job would load.
+    tmp = path.with_suffix(".part")
     try:
         import urllib.request
-        urllib.request.urlretrieve(url, path)
+        urllib.request.urlretrieve(url, tmp)
+        tmp.replace(path)
     except Exception as e:
+        tmp.unlink(missing_ok=True)
         raise RuntimeError(
             f"Could not download pose model from {url}. "
             f"Download it manually and set GAIT_ANALYZER_CACHE to a dir containing "
-            f"pose_landmarker_{_model_variant()}.task. Error: {e}"
+            f"pose_landmarker_{variant}.task. Error: {e}"
         ) from e
     return str(path)
 
 
-def extract_poses(frames, model_complexity=1, start_frame_idx=0, timestamps_ms=None):
+def extract_poses(frames, model_complexity=1, start_frame_idx=0, timestamps_ms=None, model_variant=None):
     """
     Run MediaPipe Pose on each frame and return landmark data (Tasks API).
 
@@ -73,6 +89,7 @@ def extract_poses(frames, model_complexity=1, start_frame_idx=0, timestamps_ms=N
         timestamps_ms: Optional list of actual frame timestamps in milliseconds (from
             cap.get(cv2.CAP_PROP_POS_MSEC)). If provided, used instead of assuming
             constant FPS. Must match len(frames).
+        model_variant: "lite" | "full" | "heavy"; None = GAIT_POSE_MODEL (default lite).
 
     Returns:
         List of dicts, one per frame: {"frame_idx": int, "timestamp_ms": float,
@@ -85,7 +102,7 @@ def extract_poses(frames, model_complexity=1, start_frame_idx=0, timestamps_ms=N
     from mediapipe.tasks.python.vision import pose_landmarker
     from mediapipe.tasks.python.vision.core import vision_task_running_mode
 
-    model_path = _ensure_model()
+    model_path = _ensure_model(model_variant if model_variant in _POSE_MODEL_URLS else _model_variant())
     base_opts = base_options.BaseOptions(model_asset_path=model_path)
     opts = pose_landmarker.PoseLandmarkerOptions(
         base_options=base_opts,

@@ -68,9 +68,8 @@ def test_no_rear_metric_can_reach_high():
 
 
 # ---- Error margin / display precision -----------------------------------------------------
-def test_knee_valgus_carries_the_19_degree_margin_and_others_are_honestly_unvalidated():
-    assert rc.ERROR_MARGIN_DEG["knee_valgus"] == 19.0
-    assert rc.ERROR_MARGIN_DEG["hip_drop"] is None and rc.ERROR_MARGIN_DEG["pronation"] is None
+def test_no_metric_claims_an_error_margin_we_have_not_measured():
+    assert all(v is None for v in rc.ERROR_MARGIN_DEG.values())
 
 
 def test_display_rounding_is_coarser_for_less_trustworthy_metrics():
@@ -110,7 +109,21 @@ def test_symmetry_bands():
     assert rc.symmetry_band(40) == "notable_asymmetry"
 
 
-def test_every_metric_has_a_disclaimer_and_valgus_states_the_margin():
+def test_every_metric_has_a_disclaimer_and_knee_says_it_is_a_pattern():
     assert set(rc.DISCLAIMERS) == {"hip_drop", "pronation", "knee_valgus", "step_width", "symmetry"}
-    assert "±19°" in rc.DISCLAIMERS["knee_valgus"]
+    assert "pattern, not a precise angle" in rc.DISCLAIMERS["knee_valgus"]
+    assert "±" not in rc.DISCLAIMERS["knee_valgus"]
     assert all("session" in d for d in rc.DISCLAIMERS.values())
+
+
+# ---- Capture notes -------------------------------------------------------------------------
+def test_capture_notes_only_flag_real_problems():
+    assert rc.capture_notes({"camera_roll_deg": 1.0, "size_change_ratio": 0.98}, 59.94) == []
+    assert rc.capture_notes({}, None) == []
+
+
+def test_capture_notes_cover_low_fps_tilt_and_running_away():
+    notes = rc.capture_notes({"camera_roll_deg": -4.4, "size_change_ratio": 0.7}, 29.97)
+    assert [n["code"] for n in notes] == ["moving_away", "low_fps", "camera_tilted"]
+    assert "30 fps" in notes[1]["message"]
+    assert "about 4°" in notes[2]["message"]

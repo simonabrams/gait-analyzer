@@ -203,8 +203,8 @@ def test_short_clip_is_low_confidence_but_reported():
 def test_valgus_is_coarse_flagged_with_its_error_margin_and_disclaimer():
     obj = _run(valgus_left=10.0)["legs"]["left"]["knee_valgus"]
     assert obj["value_deg"] % 5 == 0
-    assert obj["error_margin_deg"] == 19.0
-    assert "±19°" in obj["disclaimer"]
+    assert obj["error_margin_deg"] is None
+    assert "pattern, not a precise angle" in obj["disclaimer"]
     assert obj["confidence"]["tier"] in ("low", "moderate")
 
 
@@ -295,3 +295,13 @@ def test_pronation_and_hip_drop_are_experimental_and_out_of_symmetry():
         assert rv["legs"]["left"]["experimental"][metric]["available"]
     assert set(rv["symmetry"]["components"]) == {"knee_valgus", "step_width"}
     assert set(rv["curves"]["left"]) == {"hip_drop_deg", "knee_valgus_deg"}
+
+
+# ---- Capture-quality signals for filming tips ------------------------------------------
+def test_camera_roll_and_size_change_are_recorded():
+    level = _run()
+    assert level["meta"]["camera_roll_deg"] == pytest.approx(0, abs=0.5)
+    assert level["meta"]["size_change_ratio"] == pytest.approx(1.0, abs=0.03)
+    assert _run(camera_roll_deg=5.0)["meta"]["camera_roll_deg"] == pytest.approx(5, abs=1)
+    away = _run(scale_end=0.7)
+    assert away["meta"]["size_change_ratio"] < 0.8

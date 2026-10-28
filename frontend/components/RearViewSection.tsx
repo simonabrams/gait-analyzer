@@ -13,13 +13,17 @@ import { displayedBalance } from "@/lib/rearBalance";
  * the balance score is rebuilt without them. Step width only appears when
  * present (metrics_version 2+). */
 export default function RearViewSection({ rearView }: { rearView: RearView }) {
+  const notes = rearView.meta?.capture_notes ?? [];
   if (rearView.status === "insufficient_data") {
     return (
-      <div className="bg-secondary border border-white/10 rounded-xl p-5">
-        <p className="text-sm text-gray-400">
-          {rearView.confidence_gate?.user_message ??
-            "We couldn't get a reliable read from the rear-view video."}
-        </p>
+      <div className="space-y-4">
+        <div className="bg-secondary border border-white/10 rounded-xl p-5">
+          <p className="text-sm text-gray-400">
+            {rearView.confidence_gate?.user_message ??
+              "We couldn't get a reliable read from the rear-view video."}
+          </p>
+        </div>
+        <CaptureNotes notes={notes} />
       </div>
     );
   }
@@ -41,6 +45,7 @@ export default function RearViewSection({ rearView }: { rearView: RearView }) {
         <LegCard title="Right Leg" leg={rearView.legs.right} />
       </div>
       {rearView.symmetry && <SymmetryCard symmetry={rearView.symmetry} />}
+      <CaptureNotes notes={notes} />
       <p className="text-xs text-gray-500 text-center">
         Rear-view patterns are rougher than the side-view numbers above. Use them to spot
         left/right differences and changes between sessions.
@@ -102,12 +107,31 @@ function formatValue(metric: Extract<RearMetric, { available: true }>): string {
   return `${v > 0 ? "+" : ""}${v}°`;
 }
 
-function MetricRow({ label, metric }: { label: string; metric: RearMetric }) {
+/** Tooltip copy for the metrics this page shows. The backend also stores a
+ * `disclaimer` with each result, but that's frozen at analysis time — runs
+ * analysed before Sep 2026 still carry an unsourced "±19°" knee figure — so
+ * current wording lives here and the stored text is only a fallback. Keep in
+ * step with backend/rear_confidence.py DISCLAIMERS. */
+const SESSION_TO_SESSION = "Best used to spot side-to-side differences and changes between sessions.";
+const TOOLTIPS: Record<string, string> = {
+  knee_valgus:
+    "Whether your knee tracks inward or outward of the hip-to-ankle line early in stance. " +
+    "Knee angles from a single camera can differ a lot from lab measurements (studies report " +
+    "20° or more), so treat this as a pattern, not a precise angle. " + SESSION_TO_SESSION,
+  step_width:
+    "Where your foot lands relative to the middle of your body, as a share of your hip width. " +
+    "Below zero means the foot crosses the midline. " + SESSION_TO_SESSION,
+  symmetry:
+    "Compares your left and right legs on knee alignment and step width, so it carries their " +
+    "uncertainty too. " + SESSION_TO_SESSION,
+};
+
+function MetricRow({ label, metricKey, metric }: { label: string; metricKey: string; metric: RearMetric }) {
   return (
     <div className="flex items-start justify-between gap-3 py-2.5 border-b border-white/5 last:border-b-0">
       <div className="flex items-center pt-0.5">
         <span className="text-sm text-gray-300">{label}</span>
-        {metric.available && <MetricTooltip content={metric.disclaimer} />}
+        {metric.available && <MetricTooltip content={TOOLTIPS[metricKey] ?? metric.disclaimer} />}
       </div>
       {metric.available ? (
         <div className="text-right">
@@ -131,8 +155,8 @@ function LegCard({ title, leg }: { title: string; leg: RearLeg }) {
   return (
     <div className="bg-secondary border border-white/10 rounded-xl p-5">
       <p className="font-mono text-[11px] tracking-[0.12em] text-primary uppercase mb-1">{title}</p>
-      <MetricRow label="Knee alignment" metric={leg.knee_valgus} />
-      {leg.step_width && <MetricRow label="Step width" metric={leg.step_width} />}
+      <MetricRow label="Knee alignment" metricKey="knee_valgus" metric={leg.knee_valgus} />
+      {leg.step_width && <MetricRow label="Step width" metricKey="step_width" metric={leg.step_width} />}
     </div>
   );
 }
@@ -155,7 +179,7 @@ function SymmetryCard({ symmetry }: { symmetry: RearSymmetry }) {
           <p className="font-mono text-[11px] tracking-[0.12em] text-primary uppercase">
             Left/right balance
           </p>
-          <MetricTooltip content={symmetry.disclaimer} />
+          <MetricTooltip content={TOOLTIPS.symmetry} />
         </div>
         <ReliabilityBadge tier={symmetry.confidence.tier} />
       </div>
@@ -164,6 +188,28 @@ function SymmetryCard({ symmetry }: { symmetry: RearSymmetry }) {
         <span className="text-gray-400 text-sm">/ 100</span>
       </div>
       <p className="text-sm text-gray-300 mt-0.5">{patternLabel(balance.band)}</p>
+    </div>
+  );
+}
+
+/** "For your next rear-view clip" tips from what the analysis noticed about
+ * the footage (low frame rate, tilted camera, running away from the camera).
+ * Informational, not a warning: the results above already account for them. */
+function CaptureNotes({ notes }: { notes: { code: string; message: string }[] }) {
+  if (notes.length === 0) return null;
+  return (
+    <div className="rounded-xl border border-blue-700/30 bg-blue-950/30 px-5 py-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-blue-300 mb-2">
+        For your next rear-view clip
+      </p>
+      <ul className="space-y-1.5">
+        {notes.map((n) => (
+          <li key={n.code} className="text-sm text-blue-100/90 leading-relaxed flex gap-2">
+            <span aria-hidden className="text-blue-400">•</span>
+            <span>{n.message}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

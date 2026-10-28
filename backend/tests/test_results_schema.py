@@ -138,3 +138,15 @@ def test_rear_results_stored_before_hip_drop_went_experimental_still_validate():
         rv["legs"][leg]["hip_drop"] = rv["legs"][leg]["experimental"].pop("hip_drop")
     rv["symmetry"]["components"]["hip_drop"] = 90
     assert _errors(doc) == []
+
+
+def test_capture_notes_and_frame_cap_fields_validate():
+    doc = copy.deepcopy(SAMPLE)
+    meta = doc["rear_view"]["meta"]
+    meta.update(
+        original_fps=29.97, truncated_frames=900, frames_used=900, camera_roll_deg=4.2, size_change_ratio=0.7,
+        capture_notes=[{"code": "low_fps", "message": "This clip reached us at 30 fps."}],
+    )
+    assert _errors(doc) == []
+    meta["capture_notes"] = [{"code": "made_up", "message": "x"}]
+    assert _errors(doc)

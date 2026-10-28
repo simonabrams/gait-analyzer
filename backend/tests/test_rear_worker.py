@@ -221,3 +221,29 @@ def test_max_frames_and_width_stay_shared_with_the_side_pipeline(monkeypatch):
     monkeypatch.delenv("GAIT_TARGET_FPS", raising=False)
     monkeypatch.delenv("GAIT_REAR_TARGET_FPS", raising=False)
     assert rear_worker._limits_from_env() == (900, 1280, None)
+
+
+def test_capture_notes_and_original_fps_are_attached(env, monkeypatch):
+    monkeypatch.setattr(rear_worker, "preprocess_video", MagicMock(return_value={"original_fps": 29.97}))
+    rv = dict(REAR_VIEW, meta={"camera_roll_deg": 6.0, "size_change_ratio": 1.0})
+    monkeypatch.setattr(rear_worker, "run_rear_analysis", MagicMock(return_value=_analysis_result(rear_view=rv)))
+    rear_worker.process_rear_video.run(env.run_id, "k")
+    meta = _rear(env).results_json["meta"]
+    assert meta["original_fps"] == 29.97
+    assert [n["code"] for n in meta["capture_notes"]] == ["low_fps", "camera_tilted"]
+
+
+def test_rear_pose_model_defaults_to_full_and_can_be_overridden(env, monkeypatch):
+    analysis = MagicMock(return_value=_analysis_result())
+    monkeypatch.setattr(rear_worker, "run_rear_analysis", analysis)
+    monkeypatch.delenv("GAIT_REAR_POSE_MODEL", raising=False)
+    rear_worker.process_rear_video.run(env.run_id, "k")
+    assert analysis.call_args.kwargs["model_variant"] == "full"
+
+    with env.Session() as db:
+        db.query(RunVideo).one().status = "processing"
+        db.commit()
+    monkeypatch.setenv("GAIT_REAR_POSE_MODEL", "heavy")
+    analysis.return_value = _analysis_result()
+    rear_worker.process_rear_video.run(env.run_id, "k")
+    assert analysis.call_args.kwargs["model_variant"] == "heavy"

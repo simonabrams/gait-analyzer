@@ -109,12 +109,19 @@ services:
         sync: false
       - key: GAIT_MAX_WIDTH
         sync: false
-      # Subsample video to this many frames per second before pose extraction (e.g. 10).
-      # Reduces memory and CPU significantly; 8-10 fps is sufficient for the side pipeline.
+      # Subsample video to this many frames per second before pose extraction (e.g. 30).
+      # Lower saves CPU, but below ~30 fps foot contact is only 2-3 frames, which blurs
+      # knee angle at strike and overstride (15 fps was measured too coarse, Sep 2026).
       - key: GAIT_TARGET_FPS
         sync: false
       # Optional: overrides GAIT_TARGET_FPS for the rear-view pipeline only (falls back to
       # it if unset). A rear gait cycle is much shorter in frames than a side stride at the
       # same fps, so it benefits from a higher rate — try ~30 (see backend/rear_worker.py).
       - key: GAIT_REAR_TARGET_FPS
+        sync: false
+      # Optional: pose model for the rear-view pipeline only: lite | full | heavy (unset = full).
+      # The side pipeline keeps GAIT_POSE_MODEL (unset = lite). Check pose= (seconds) and
+      # pose_model= in the worker's pipeline_timing log lines before going to heavy
+      # (~4-5x lite's time per frame).
+      - key: GAIT_REAR_POSE_MODEL
         sync: false

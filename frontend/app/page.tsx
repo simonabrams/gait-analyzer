@@ -6,11 +6,11 @@ export const metadata: Metadata = {
     absolute: "Runlens — AI-Powered Running Gait Analysis",
   },
   description:
-    "Upload a short side-view running video and get instant AI feedback on your cadence, bounce, knee drive, and overall running form. Free to try.",
+    "Upload a short side-view running video, plus an optional rear view, and get AI feedback on your cadence, bounce, knee drive and left/right balance. Free to try.",
   openGraph: {
     title: "Runlens — AI-Powered Running Gait Analysis",
     description:
-      "Upload a short side-view running video and get instant AI feedback on your cadence, bounce, knee drive, and overall running form.",
+      "Upload a short side-view running video, plus an optional rear view, and get AI feedback on your cadence, bounce, knee drive and left/right balance.",
   },
 };
 
@@ -21,7 +21,7 @@ const jsonLd = {
   applicationCategory: "HealthApplication",
   operatingSystem: "Web",
   description:
-    "AI-powered running gait analysis. Upload a video, get instant form feedback on cadence, stride, posture, and more.",
+    "AI-powered running gait analysis. Upload a side-view video (and optionally one from behind) and get form feedback on cadence, stride, posture and left/right balance.",
   url: "https://runlens.io",
   offers: {
     "@type": "Offer",

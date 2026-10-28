@@ -15,7 +15,7 @@ from backend import confidence_gate
 from backend.dashboard import create_dashboard
 from backend.heuristics import evaluate_heuristics
 from backend.metrics import compute_metrics
-from backend.pose_extractor import extract_poses
+from backend.pose_extractor import _model_variant, extract_poses
 from backend.step_timer import StepTimer
 from backend.view_check import ViewCheck, classify_view
 from backend.visualizer import annotate_single_frame, build_frame_to_stride_flags
@@ -186,6 +186,7 @@ def run_analysis(
 
         cap.release()
         timer.info.update(
+            pose_model=_model_variant(),
             source_fps=float(fps),
             effective_fps=float(effective_fps),
             frames_used=frames_used,

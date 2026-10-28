@@ -29,7 +29,7 @@ from backend.step_timer import StepTimer
 from backend.visualizer import annotate_rear_frame
 
 
-def run_rear_analysis(video_path, max_frames=None, max_width=None, target_fps=None, timer=None):
+def run_rear_analysis(video_path, max_frames=None, max_width=None, target_fps=None, timer=None, model_variant=None):
     """Returns {"rear_view": dict, "annotated_video_path": str, "temp_paths": list[str],
     "frames_used": int, "truncated": bool}.
 
@@ -93,13 +93,17 @@ def run_rear_analysis(video_path, max_frames=None, max_width=None, target_fps=No
                 start_idx = frames_used - len(chunk)
                 with timer.step("pose"):
                     pose_frames.extend(
-                        extract_poses(chunk, start_frame_idx=start_idx, timestamps_ms=chunk_timestamps)
+                        extract_poses(
+                            chunk, start_frame_idx=start_idx, timestamps_ms=chunk_timestamps,
+                            model_variant=model_variant,
+                        )
                     )
                 del chunk
         finally:
             cap.release()
 
         timer.info.update(
+            pose_model=model_variant or "default",
             source_fps=float(fps),
             effective_fps=float(effective_fps),
             frames_used=frames_used,

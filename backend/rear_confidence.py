@@ -9,11 +9,13 @@ view is deliberately held to a different standard than the side view:
   report; a rear-view problem only ever downgrades `rear_view.status` (see
   evaluate_gate) and leaves the side-view results untouched.
 - Its bands are wider, and its outputs are framed as pattern/trend
-  indicators, not measurements. Single-camera 2D knee valgus has a reported
-  error margin of roughly +/-19 deg vs. motion capture (figure supplied by the
-  product owner, not independently verified here) — larger than the whole
-  range of "normal" — so a lone angle can't be trusted; a consistent
-  left/right difference or a change between sessions can be.
+  indicators, not measurements. Single-camera 2D frontal-plane knee angles
+  in running agree poorly with motion capture: one study found 2D video
+  overestimated knee valgus by ~26 deg, and a 2023 meta-analysis rated
+  frontal-plane validity poor to moderate. That is larger than the whole
+  range of "normal", so a lone angle can't be trusted; a consistent
+  left/right difference or a change between sessions can be. (An earlier
+  "+/-19 deg" figure here had no source and was removed.)
 
 Every number below marked PROVISIONAL is a starting point to tune against real
 rear-view clips; none of them is a validated clinical threshold.
@@ -41,8 +43,8 @@ _TIER_ORDER = ("low", "moderate", "high")
 
 # Even with perfect inputs, none of these should read "high": hip drop is the
 # best-behaved of the three but still a 2D projection with unvalidated
-# error; pronation is a proxy from a very short ankle-heel vector; valgus has
-# the +/-19 deg margin. PROVISIONAL.
+# error; pronation is a proxy from a very short ankle-heel vector; 2D knee
+# alignment can be off by 20+ deg vs. motion capture. PROVISIONAL.
 TIER_CEILING = {
     "hip_drop": "moderate",
     "pronation": "low",
@@ -60,10 +62,11 @@ UNIT = {"hip_drop": "deg", "pronation": "deg", "knee_valgus": "deg", "step_width
 SPREAD_REFERENCE_DEG = {"hip_drop": 4.0, "pronation": 6.0, "knee_valgus": 8.0, "step_width": 15.0}
 
 # --- Error margins -----------------------------------------------------------
-# Only knee valgus has a figure. The others are left None ("unvalidated")
-# rather than invented — a made-up +/- would read as more authoritative than
-# the truth, which is that we don't have one. Fill these in when sourced.
-ERROR_MARGIN_DEG = {"hip_drop": None, "pronation": None, "knee_valgus": 19.0, "step_width": None}
+# All None ("unvalidated") rather than invented: a made-up +/- reads as more
+# authoritative than the truth, which is that we don't have one. Knee valgus
+# used to carry an unsourced 19.0. Fill these in from our own repeatability /
+# accuracy study (improvement plan, Phase 4), not from a single paper.
+ERROR_MARGIN_DEG = {"hip_drop": None, "pronation": None, "knee_valgus": None, "step_width": None}
 
 # --- Plausibility bounds (deg) ----------------------------------------------
 # Outside these a value is almost certainly a landmark artifact. Unlike the
@@ -127,8 +130,8 @@ DISCLAIMERS = {
     ),
     "knee_valgus": (
         "Whether your knee tracks inward or outward of the hip-to-ankle line "
-        "during the first half of stance. Knee angles from a single camera can be "
-        "off by roughly ±19° vs. lab-grade motion capture, so treat this as a "
+        "early in stance. Knee angles from a single camera can differ a lot from "
+        "lab measurements (studies report 20° or more), so treat this as a "
         "pattern, not a precise angle. " + _SESSION_TO_SESSION
     ),
     "step_width": (
@@ -295,3 +298,48 @@ def symmetry_band(score: float) -> str:
     if score >= SYMMETRY_BAND_MILD_MIN:
         return "mild_asymmetry"
     return "notable_asymmetry"
+
+
+# --- Capture notes ("for next time" filming tips) ------------------------------
+# Never change a result: they only tell the runner how to film a better clip.
+# PROVISIONAL thresholds.
+CAPTURE_LOW_FPS = 50.0          # original upload fps below this -> suggest 60 fps
+CAPTURE_ROLL_DEG = 3.0          # |camera roll| above this -> suggest a level camera
+CAPTURE_SHRINK_RATIO = 0.85     # runner's size in frame, end vs start, below this
+
+
+def capture_notes(meta: dict, original_fps: float | None) -> list[dict]:
+    """Filming tips for a rear clip, from what the analysis noticed about the
+    footage: [{"code", "message"}], most useful first. `meta` is a rear_view
+    meta dict (camera_roll_deg / size_change_ratio from rear_metrics);
+    `original_fps` is the uploaded file's frame rate, before any frame
+    dropping (video_preprocessor.probe_source)."""
+    notes = []
+    shrink = meta.get("size_change_ratio")
+    if shrink is not None and shrink < CAPTURE_SHRINK_RATIO:
+        notes.append({
+            "code": "moving_away",
+            "message": (
+                "You got smaller in the frame as the clip went on, so you were probably "
+                "running away from the camera. A treadmill keeps you the same size and "
+                "gives a steadier read."
+            ),
+        })
+    if original_fps and original_fps < CAPTURE_LOW_FPS:
+        notes.append({
+            "code": "low_fps",
+            "message": (
+                f"This clip reached us at {round(original_fps)} fps. Filming at 60 fps "
+                "gives a sharper read of each stride (on iPhone: 1080p at 60 fps)."
+            ),
+        })
+    roll = meta.get("camera_roll_deg")
+    if roll is not None and abs(roll) > CAPTURE_ROLL_DEG:
+        notes.append({
+            "code": "camera_tilted",
+            "message": (
+                f"The camera looks tilted by about {round(abs(roll))}°. We correct for it, "
+                "but a level camera (use your phone's level) gives the cleanest read."
+            ),
+        })
+    return notes

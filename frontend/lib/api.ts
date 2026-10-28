@@ -118,6 +118,11 @@ export interface RearView {
   };
   legs?: { left: RearLeg; right: RearLeg };
   symmetry?: RearSymmetry;
+  meta?: {
+    /** Filming tips for next time (backend rear_confidence.capture_notes);
+     * never change a result. Absent on rear results from before Oct 2026. */
+    capture_notes?: { code: string; message: string }[];
+  };
 }
 
 export interface RunListItem {

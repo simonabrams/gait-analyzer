@@ -15,7 +15,7 @@ const TILE_CONFIG = [
     ...METRIC_TARGETS.cadence,
     label: "CADENCE", // overrides METRIC_TARGETS' own title-case label — must come AFTER the spread
     flagMetrics: ["cadence", "stride_and_cadence"],
-    tooltip: "Measured by detecting stride cycles in your video. Accurate to ±2–3% under good filming conditions.",
+    tooltip: "Counted from the stride cycles in your video. One of the most dependable video measurements, since it doesn't depend on camera angle.",
     format: (v: number) => String(Math.round(v)),
   },
   {
@@ -29,7 +29,7 @@ const TILE_CONFIG = [
     ...METRIC_TARGETS.kneeDrive,
     label: "KNEE DRIVE",
     flagMetrics: ["knee_flexion_at_strike"],
-    tooltip: "Joint angles from a single camera view are reliable within ~10% vs. lab-grade motion capture under optimal conditions.",
+    tooltip: "How much your knee is bent as your foot lands, from a single side-on camera. Joint angles from video are estimates — best compared session-to-session.",
     format: (v: number) => String(Math.round(v)),
   },
   {
