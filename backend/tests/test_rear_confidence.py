@@ -127,3 +127,11 @@ def test_capture_notes_cover_low_fps_tilt_and_running_away():
     assert [n["code"] for n in notes] == ["moving_away", "low_fps", "camera_tilted"]
     assert "30 fps" in notes[1]["message"]
     assert "about 4°" in notes[2]["message"]
+
+
+def test_noise_sized_left_right_gaps_still_read_as_balanced():
+    # Real case (Oct 2026): knee -3.6 vs -1.2 deg scored 59 with the old 3 deg floor.
+    assert 100 - rc.symmetry_index("knee_valgus", -3.6, -1.2) >= rc.SYMMETRY_BAND_SYMMETRIC_MIN
+    assert 100 - rc.symmetry_index("step_width", 15.0, 20.0) >= rc.SYMMETRY_BAND_SYMMETRIC_MIN
+    # A real gap still shows up.
+    assert 100 - rc.symmetry_index("knee_valgus", 5.0, 20.0) < rc.SYMMETRY_BAND_MILD_MIN

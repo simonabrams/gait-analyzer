@@ -100,7 +100,9 @@ _CURVE_MIN_COVERAGE = 0.5
 # 2: tilt-cancelled peak hip drop, peak knee alignment, step_width added,
 #    pronation moved under legs.<leg>.experimental, landmark smoothing.
 # 3: hip_drop moved under legs.<leg>.experimental too (see below).
-METRICS_VERSION = 3
+# 4: knee / step-width symmetry floors raised (rear_confidence.SYMMETRY_FLOOR_DEG),
+#    so balance scores from version <= 3 are harsher on small gaps.
+METRICS_VERSION = 4
 
 # Reported per leg and combined into the symmetry score.
 METRICS = ("knee_valgus", "step_width")

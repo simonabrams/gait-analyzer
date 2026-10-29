@@ -17,7 +17,7 @@ from backend.heuristics import evaluate_heuristics
 from backend.metrics import compute_metrics
 from backend.pose_extractor import _model_variant, extract_poses
 from backend.step_timer import StepTimer
-from backend.view_check import ViewCheck, classify_view
+from backend.view_check import ViewCheck, classify_view, side_capture_notes
 from backend.visualizer import annotate_single_frame, build_frame_to_stride_flags
 
 
@@ -37,6 +37,7 @@ def apply_confidence_gate(results: dict, view: ViewCheck | None = None):
     gate = confidence_gate.evaluate(results.get("summary") or {})
     if view is not None:
         results.setdefault("meta", {})["view_check"] = view.as_dict()
+        results["meta"]["capture_notes"] = side_capture_notes(view)
         if view.view == "frontal":
             gate = confidence_gate.wrong_view(gate)
     results.setdefault("meta", {})["confidence_gate"] = {
