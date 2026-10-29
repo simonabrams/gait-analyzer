@@ -66,9 +66,9 @@
   "rear_view": {
     "status": "ok",
     "meta": {
-      "metrics_version": 3,
+      "metrics_version": 4,
       "video_file": "rear.mp4",
-      "analyzed_at": "2026-10-28T20:51:33.883379+00:00",
+      "analyzed_at": "2026-10-29T03:21:20.686102+00:00",
       "fps": 30.0,
       "num_frames": 330,
       "cycle_normalisation": "percent_gait_cycle",
@@ -253,10 +253,10 @@
     },
     "symmetry": {
       "available": true,
-      "score": 50,
-      "band": "notable_asymmetry",
+      "score": 86,
+      "band": "symmetric",
       "components": {
-        "knee_valgus": 0,
+        "knee_valgus": 72,
         "step_width": 100
       },
       "confidence": {

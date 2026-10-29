@@ -91,3 +91,24 @@ def test_real_rear_clip_is_unaffected():
     rv = rm.compute_rear_metrics(make_rear_frames(), FPS)
     assert rv["status"] == "ok"
     assert rv["meta"]["view_check"]["view"] == "frontal"
+
+
+# ---- Side capture note for a diagonal camera -----------------------------------
+def test_shoulder_ratio_maps_to_degrees_off_side_on():
+    from backend.view_check import degrees_off_side_on
+    assert degrees_off_side_on(0.0) == pytest.approx(0)
+    assert degrees_off_side_on(0.8) == pytest.approx(90)
+    assert degrees_off_side_on(0.35) == pytest.approx(26, abs=1)  # the real Oct 2026 upload
+
+
+def test_diagonal_side_clip_gets_an_angle_note_and_keeps_its_metrics():
+    gate, results = apply_confidence_gate(_results(), view=classify_view(_frames(60)))  # 30 deg off side-on
+    assert not gate.hard_fail and results["summary"]
+    notes = results["meta"]["capture_notes"]
+    assert [n["code"] for n in notes] == ["camera_angle"]
+    assert "30° off side-on" in notes[0]["message"]
+
+
+def test_side_on_clip_gets_no_angle_note():
+    _, results = apply_confidence_gate(_results(), view=classify_view(_frames(85)))
+    assert results["meta"]["capture_notes"] == []

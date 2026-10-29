@@ -75,7 +75,7 @@ Each pipeline step is a separate module in `backend/`. The `job_runner.py` orche
 - **GAIT_MAX_FRAMES** (default 900) and **GAIT_MAX_WIDTH** (default 1280): Env vars that limit video dimensions to manage memory. Preprocessing (`video_preprocessor.py`, one ffmpeg pass) trims each clip to the seconds these caps will actually read
 - **Pose model per pipeline**: side uses `GAIT_POSE_MODEL` (default `lite`), rear uses `GAIT_REAR_POSE_MODEL` (default `full`; `heavy` also available). Models download on first use to `GAIT_ANALYZER_CACHE`; `pipeline_timing` logs `pose_model=` and `pose=` seconds
 - **Rear capture notes** (`rear_confidence.capture_notes`, attached in `rear_worker`): low upload fps, camera roll > 3° (median trunk angle), runner shrinking in frame. Filming tips only — they never change a result
-- **Wrong-view guard** (`view_check.py`): a frontal clip in the side slot hard-fails the side gate (`reason=wrong_view`, free scan refunded); a side clip in the rear slot returns rear `insufficient_data` / `wrong_view`. Thresholds are provisional — check `shoulder_ratio` in the worker's `pipeline_timing` log lines when tuning
+- **Wrong-view guard** (`view_check.py`): a frontal clip in the side slot hard-fails the side gate (`reason=wrong_view`, free scan refunded); a side clip in the rear slot returns rear `insufficient_data` / `wrong_view`. A diagonal side clip (ratio 0.30–0.60) is analysed but gets a `camera_angle` capture note (`view_check.side_capture_notes`, shown on the results page). Thresholds are provisional — check `shoulder_ratio` in the worker's `pipeline_timing` log lines when tuning
 - **API rewrites**: `frontend/next.config.js` rewrites `/api/*` to `$NEXT_PUBLIC_API_URL` (falls back to `localhost:8000`)
 
 ### Frontend Routes

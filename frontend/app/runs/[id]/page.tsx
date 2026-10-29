@@ -12,6 +12,7 @@ import ClaimBanner from "@/components/ClaimBanner";
 import DeleteScanButton from "@/components/DeleteScanButton";
 import AddRearVideoControl from "@/components/AddRearVideoControl";
 import RearViewSection from "@/components/RearViewSection";
+import CaptureNotes, { captureNotesFrom } from "@/components/CaptureNotes";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -216,6 +217,7 @@ export default async function RunResultPage({ params, searchParams }: Props) {
               How we measure
             </Link>
           </p>
+          <CaptureNotes title="For your next side-view clip" notes={captureNotesFrom(run.results?.meta)} />
 
           {/* What to work on — side-view findings only (see WhatToWorkOn.tsx
               for why rear patterns don't get an equivalent card here). */}

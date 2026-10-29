@@ -107,8 +107,15 @@ DISPLAY_STEP_DEG = {"hip_drop": 1.0, "pronation": 2.0, "knee_valgus": 5.0, "step
 
 # --- Symmetry ----------------------------------------------------------------
 # Symmetry index SI = 100 * |L - R| / max(mean(|L|, |R|), floor). The floor
-# stops two near-zero values from producing a huge SI out of noise.
-SYMMETRY_FLOOR_DEG = {"hip_drop": 2.0, "pronation": 3.0, "knee_valgus": 3.0, "step_width": 10.0}
+# stops two near-zero values from producing a huge SI out of noise: below it,
+# a component is effectively 100 - 100 * |L - R| / floor, so the floor is the
+# left/right gap that scores 0.
+# knee_valgus / step_width were 3 deg / 10 %: on a real runner (Oct 2026) a
+# knee gap of ~2 deg between legs scored 59, and two clips of the same runner
+# a day apart differed by ~5 deg / 5 % per leg. At 35, a 5-unit gap scores 86
+# (still "symmetric") and a 15-unit gap 57. PROVISIONAL until Phase 4 measures
+# real between-clip error.
+SYMMETRY_FLOOR_DEG = {"hip_drop": 2.0, "pronation": 3.0, "knee_valgus": 35.0, "step_width": 35.0}
 SYMMETRY_BAND_SYMMETRIC_MIN = 85
 SYMMETRY_BAND_MILD_MIN = 65
 

@@ -76,3 +76,31 @@ def classify_view(pose_frames) -> ViewCheck:
     else:
         view = "diagonal"
     return ViewCheck(view, ratio, len(ratios))
+
+
+# Shoulder width / torso length seen straight from behind or in front (see the
+# module docstring); the ratio falls off as sin(angle off the runner's line).
+_FRONTAL_RATIO = 0.8
+
+
+def degrees_off_side_on(ratio: float) -> float:
+    """Rough camera angle away from a true side-on view, from shoulder_ratio:
+    0 = side-on, 90 = straight behind / in front."""
+    return math.degrees(math.asin(min(1.0, max(0.0, ratio / _FRONTAL_RATIO))))
+
+
+def side_capture_notes(view: ViewCheck) -> list[dict]:
+    """Filming tips for a SIDE clip, same shape as
+    rear_confidence.capture_notes. A diagonal camera isn't rejected (the
+    metrics still run) but foreshortens knee drive, trunk lean and foot
+    strike, so the runner is told how far off it was."""
+    if view.view != "diagonal" or view.shoulder_ratio is None:
+        return []
+    deg = int(round(degrees_off_side_on(view.shoulder_ratio) / 5.0) * 5)
+    return [{
+        "code": "camera_angle",
+        "message": (
+            f"The camera looks about {deg}° off side-on. Knee drive, lean and foot strike "
+            "read best with the camera square to your running direction, at 90°."
+        ),
+    }]

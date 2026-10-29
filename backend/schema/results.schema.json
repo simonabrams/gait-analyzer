@@ -19,7 +19,18 @@
         "analyzed_at": { "type": "string", "format": "date-time" },
         "fps": { "type": "number" },
         "num_frames": { "type": "integer" },
-        "confidence_gate": { "type": "object" }
+        "confidence_gate": { "type": "object" },
+        "view_check": { "type": "object", "description": "backend/view_check.py: side / diagonal / frontal / unknown, with shoulder_ratio." },
+        "capture_notes": {
+          "description": "Filming tips for next time (view_check.side_capture_notes). Never change a result.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": { "code": { "enum": ["camera_angle"] }, "message": { "type": "string" } },
+            "additionalProperties": false
+          }
+        }
       },
       "additionalProperties": true
     },
@@ -97,7 +108,7 @@
           "type": "object",
           "required": ["analyzed_at", "fps", "num_frames", "cycle_normalisation", "synchronized_with_side_view", "left_right_consistency", "left_right_labels_swapped"],
           "properties": {
-            "metrics_version": { "description": "Absent means 1 (hip drop at mid-stance, pronation as a main metric). 2: tilt-cancelled peak hip drop, peak knee alignment, step_width, pronation under experimental. 3: hip_drop also under experimental.", "enum": [1, 2, 3] },
+            "metrics_version": { "description": "Absent means 1 (hip drop at mid-stance, pronation as a main metric). 2: tilt-cancelled peak hip drop, peak knee alignment, step_width, pronation under experimental. 3: hip_drop also under experimental. 4: balance score less sensitive to noise-sized knee / step-width gaps.", "enum": [1, 2, 3, 4] },
             "tilt_offset_deg": { "type": "number", "description": "Median hip-line tilt over the clip (camera roll plus standing pelvic asymmetry). Hip drop already cancels it." },
             "camera_roll_deg": { "type": "number", "description": "Median trunk angle from vertical over the clip: the camera's roll. Step width already corrects for it." },
             "size_change_ratio": { "type": "number", "minimum": 0, "description": "Runner's torso length in frame, last fifth of the clip / first fifth. Well below 1 = running away from the camera." },
